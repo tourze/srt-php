@@ -397,4 +397,4 @@ class TimerManager
     {
         $this->timers = [];
     }
-} 
+}

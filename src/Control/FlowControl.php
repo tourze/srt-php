@@ -6,7 +6,7 @@ namespace Tourze\SRT\Control;
 
 /**
  * SRT 流量控制管理器
- * 
+ *
  * 负责管理发送窗口大小、发送速率控制和流量调节
  * 实现基于窗口的流量控制算法
  */
@@ -16,47 +16,47 @@ class FlowControl
      * 发送窗口大小 (包数量)
      */
     private int $sendWindowSize;
-    
+
     /**
      * 接收窗口大小 (包数量)
      */
     private int $receiveWindowSize;
-    
+
     /**
      * 当前发送窗口中的包数量
      */
     private int $packetsInFlight = 0;
-    
+
     /**
      * 最大发送速率 (bytes/second)
      */
     private int $maxSendRate;
-    
+
     /**
      * 当前发送速率 (bytes/second)
      */
     private int $currentSendRate;
-    
+
     /**
      * 发送令牌桶
      */
     private float $tokenBucket = 0.0;
-    
+
     /**
      * 令牌桶容量
      */
     private float $bucketCapacity;
-    
+
     /**
      * 令牌填充速率 (tokens/second)
      */
     private float $tokenFillRate;
-    
+
     /**
      * 上次令牌更新时间
      */
     private float $lastTokenUpdate;
-    
+
     /**
      * 统计信息
      */
@@ -77,7 +77,7 @@ class FlowControl
         $this->receiveWindowSize = $receiveWindowSize;
         $this->maxSendRate = $maxSendRate;
         $this->currentSendRate = $maxSendRate;
-        
+
         // 初始化令牌桶
         $this->bucketCapacity = $maxSendRate / 8.0; // 1/8秒的容量
         $this->tokenFillRate = $maxSendRate;
@@ -92,19 +92,19 @@ class FlowControl
     {
         // 更新令牌桶
         $this->updateTokenBucket();
-        
+
         // 检查发送窗口
         if ($this->packetsInFlight >= $this->sendWindowSize) {
             $this->stats['window_full_count']++;
             return false;
         }
-        
+
         // 检查速率限制
         if ($this->tokenBucket < $packetSize) {
             $this->stats['rate_limited_count']++;
             return false;
         }
-        
+
         return true;
     }
 
@@ -134,7 +134,7 @@ class FlowControl
     {
         $this->packetsInFlight = max(0, $this->packetsInFlight - $count);
         $this->stats['packets_dropped'] += $count;
-        
+
         // 丢包时适当降低发送速率
         $this->adjustSendRate(0.875); // 降低12.5%
     }
@@ -162,7 +162,7 @@ class FlowControl
     {
         $this->currentSendRate = (int)($this->currentSendRate * $factor);
         $this->currentSendRate = max(1000, min($this->maxSendRate, $this->currentSendRate));
-        
+
         // 更新令牌桶参数
         $this->tokenFillRate = $this->currentSendRate;
         $this->bucketCapacity = $this->currentSendRate / 8.0;
@@ -176,7 +176,7 @@ class FlowControl
     {
         $now = microtime(true);
         $elapsed = $now - $this->lastTokenUpdate;
-        
+
         if ($elapsed > 0) {
             $tokensToAdd = $elapsed * $this->tokenFillRate;
             $this->tokenBucket = min($this->bucketCapacity, $this->tokenBucket + $tokensToAdd);

@@ -8,14 +8,14 @@ use Tourze\SRT\Exception\InvalidPacketException;
 
 /**
  * SRT 包头处理类
- * 
+ *
  * 负责解析和构建 SRT 协议的包头部分（16字节固定长度）
- * 
+ *
  * SRT 包头结构：
  * - 数据包：F(1) + SeqNum(31) + PP(2) + O(1) + KK(2) + R(1) + MsgNum(26) + Timestamp(32) + DestID(32)
  * - 控制包：F(1) + CtrlType(15) + Subtype(16) + TypeInfo(32) + Timestamp(32) + DestID(32)
  */
-readonly class PacketHeader
+class PacketHeader
 {
     // 控制包类型常量
     public const CONTROL_HANDSHAKE = 0x0000;
@@ -38,12 +38,12 @@ readonly class PacketHeader
     public const ENCRYPTION_BOTH_KEYS = 0b11;
 
     private function __construct(
-        private bool $isControlPacket,
-        private int $field1,           // 序列号 或 控制类型
-        private int $field2,           // 消息相关字段 或 类型特定信息
-        private int $timestamp,
-        private int $destinationSocketId,
-        private int $subtype = 0       // 仅控制包使用
+        private readonly bool $isControlPacket,
+        private readonly int $field1,           // 序列号 或 控制类型
+        private readonly int $field2,           // 消息相关字段 或 类型特定信息
+        private readonly int $timestamp,
+        private readonly int $destinationSocketId,
+        private readonly int $subtype = 0       // 仅控制包使用
     ) {}
 
     /**
@@ -72,7 +72,7 @@ readonly class PacketHeader
             // F=1 在位31，Subtype 在位15-30，CtrlType 在位0-14
             $controlType = $field1 & 0x7FFF;              // 控制类型在位0-14
             $subtype = ($field1 >> 15) & 0xFFFF;          // 子类型在位15-30
-            
+
             return new self(
                 isControlPacket: true,
                 field1: $controlType,
@@ -97,15 +97,16 @@ readonly class PacketHeader
      * 创建数据包头部
      */
     public static function createDataPacket(
-        int $sequenceNumber,
-        int $packetPosition,
+        int  $sequenceNumber,
+        int  $packetPosition,
         bool $isOrdered,
-        int $encryptionFlags,
+        int  $encryptionFlags,
         bool $isRetransmitted,
-        int $messageNumber,
-        int $timestamp,
-        int $destinationSocketId
-    ): self {
+        int  $messageNumber,
+        int  $timestamp,
+        int  $destinationSocketId
+    ): self
+    {
         self::validateDataPacketFields($sequenceNumber, $packetPosition, $encryptionFlags, $messageNumber);
 
         // 构建第一个字段：F(0) + 序列号(31位)
@@ -136,7 +137,8 @@ readonly class PacketHeader
         int $typeSpecificInfo,
         int $timestamp,
         int $destinationSocketId
-    ): self {
+    ): self
+    {
         return new self(
             isControlPacket: true,
             field1: $controlType,      // 只存储控制类型
@@ -260,7 +262,8 @@ readonly class PacketHeader
         int $packetPosition,
         int $encryptionFlags,
         int $messageNumber
-    ): void {
+    ): void
+    {
         if ($sequenceNumber < 0 || $sequenceNumber > 0x7FFFFFFF) {
             throw InvalidPacketException::invalidSequenceNumber($sequenceNumber);
         }
@@ -277,4 +280,4 @@ readonly class PacketHeader
             throw InvalidPacketException::invalidMessageNumber($messageNumber);
         }
     }
-} 
+}

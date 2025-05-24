@@ -8,7 +8,7 @@ use RuntimeException;
 
 /**
  * 传输层异常
- * 
+ *
  * 当网络传输操作失败时抛出此异常
  */
 class TransportException extends RuntimeException
@@ -47,4 +47,4 @@ class TransportException extends RuntimeException
     {
         return new self("Invalid address: {$address}");
     }
-} 
+}

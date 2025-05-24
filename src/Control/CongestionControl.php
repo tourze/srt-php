@@ -6,7 +6,7 @@ namespace Tourze\SRT\Control;
 
 /**
  * SRT 拥塞控制管理器
- * 
+ *
  * 实现基于丢包率和RTT的拥塞控制算法
  * 支持AIMD (Additive Increase Multiplicative Decrease) 算法
  */
@@ -16,72 +16,72 @@ class CongestionControl
      * 当前发送速率 (bytes/second)
      */
     private int $sendingRate;
-    
+
     /**
      * 最大发送速率 (bytes/second)
      */
     private int $maxSendingRate;
-    
+
     /**
      * 最小发送速率 (bytes/second)
      */
     private int $minSendingRate;
-    
+
     /**
      * 当前RTT (微秒)
      */
     private int $currentRtt = 0;
-    
+
     /**
      * 平滑RTT (微秒)
      */
     private float $smoothedRtt = 0.0;
-    
+
     /**
      * RTT变化量 (微秒)
      */
     private float $rttVariation = 0.0;
-    
+
     /**
      * 丢包率 (0.0 - 1.0)
      */
     private float $lossRate = 0.0;
-    
+
     /**
      * 丢包率阈值
      */
     private float $lossThreshold = 0.05; // 5%
-    
+
     /**
      * 拥塞窗口大小
      */
     private float $congestionWindow;
-    
+
     /**
      * 慢启动阈值
      */
     private float $slowStartThreshold;
-    
+
     /**
      * 是否处于慢启动阶段
      */
     private bool $inSlowStart = true;
-    
+
     /**
      * 加性增加步长 (bytes/RTT)
      */
     private int $additiveIncrease = 1000;
-    
+
     /**
      * 乘性减少因子
      */
     private float $multiplicativeDecrease = 0.875;
-    
+
     /**
      * RTT测量历史
      */
     private array $rttHistory = [];
-    
+
     /**
      * 丢包统计
      */
@@ -90,7 +90,7 @@ class CongestionControl
         'lost_packets' => 0,
         'last_loss_time' => 0,
     ];
-    
+
     /**
      * 拥塞控制统计
      */
@@ -101,6 +101,11 @@ class CongestionControl
         'congestion_events' => 0,
     ];
 
+    /**
+     * RTT 估算器
+     */
+    private RttEstimator $rttEstimator;
+
     public function __construct(
         int $initialRate = 1000000, // 1MB/s
         int $maxRate = 100000000,   // 100MB/s
@@ -109,10 +114,13 @@ class CongestionControl
         $this->sendingRate = $initialRate;
         $this->maxSendingRate = $maxRate;
         $this->minSendingRate = $minRate;
-        
+
         // 初始化拥塞窗口 (以包为单位)
         $this->congestionWindow = 2.0;
         $this->slowStartThreshold = 65536.0; // 64KB
+        
+        // 初始化 RTT 估算器
+        $this->rttEstimator = new RttEstimator();
     }
 
     /**
@@ -122,24 +130,21 @@ class CongestionControl
     {
         $this->currentRtt = $rtt;
         
-        // 平滑RTT计算 (RFC 6298)
-        if ($this->smoothedRtt == 0.0) {
-            $this->smoothedRtt = $rtt;
-            $this->rttVariation = $rtt / 2.0;
-        } else {
-            $alpha = 0.125; // 1/8
-            $beta = 0.25;   // 1/4
-            
-            $this->rttVariation = (1 - $beta) * $this->rttVariation + 
-                                  $beta * abs($this->smoothedRtt - $rtt);
-            $this->smoothedRtt = (1 - $alpha) * $this->smoothedRtt + $alpha * $rtt;
-        }
+        // 使用新的 RTT 估算器
+        $this->rttEstimator->updateRtt($rtt);
+        
+        // 更新平滑 RTT 和变化量
+        $this->smoothedRtt = $this->rttEstimator->getSmoothedRtt();
+        $this->rttVariation = $this->rttEstimator->getRttVariation();
         
         // 保存RTT历史
         $this->rttHistory[] = $rtt;
         if (count($this->rttHistory) > 100) {
             array_shift($this->rttHistory);
         }
+        
+        // 根据网络条件调整拥塞控制策略
+        $this->adaptToNetworkCondition();
     }
 
     /**
@@ -157,10 +162,10 @@ class CongestionControl
     {
         $this->lossStats['lost_packets'] += $count;
         $this->lossStats['last_loss_time'] = microtime(true);
-        
+
         // 更新丢包率
         $this->updateLossRate();
-        
+
         // 触发拥塞控制
         $this->onCongestionEvent();
     }
@@ -194,14 +199,14 @@ class CongestionControl
     private function onCongestionEvent(): void
     {
         $this->stats['congestion_events']++;
-        
+
         // 退出慢启动
         if ($this->inSlowStart) {
             $this->inSlowStart = false;
             $this->slowStartThreshold = $this->congestionWindow / 2.0;
             $this->stats['slow_start_exits']++;
         }
-        
+
         // 乘性减少
         $this->multiplicativeDecrease();
     }
@@ -212,12 +217,12 @@ class CongestionControl
     private function slowStartIncrease(): void
     {
         $this->congestionWindow += 1.0;
-        
+
         // 检查是否应该退出慢启动
         if ($this->congestionWindow >= $this->slowStartThreshold) {
             $this->inSlowStart = false;
         }
-        
+
         $this->updateSendingRate();
         $this->stats['rate_increases']++;
     }
@@ -252,7 +257,7 @@ class CongestionControl
         // 基于拥塞窗口和RTT计算发送速率
         $rtt = max(1000, $this->smoothedRtt); // 最小1ms RTT
         $mss = 1500; // 最大段大小 (bytes)
-        
+
         $newRate = (int)(($this->congestionWindow * $mss * 1000000) / $rtt);
         $this->sendingRate = max($this->minSendingRate, min($this->maxSendingRate, $newRate));
     }
@@ -371,14 +376,22 @@ class CongestionControl
             'slow_start_exits' => 0,
             'congestion_events' => 0,
         ];
-        
+
         $this->lossStats = [
             'total_packets' => 0,
             'lost_packets' => 0,
             'last_loss_time' => 0,
         ];
-        
+
         $this->lossRate = 0.0;
         $this->rttHistory = [];
+    }
+
+    /**
+     * 根据网络条件调整拥塞控制策略
+     */
+    private function adaptToNetworkCondition(): void
+    {
+        // 实现根据网络条件调整拥塞控制策略的逻辑
     }
 } 

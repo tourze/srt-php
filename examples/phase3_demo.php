@@ -2,13 +2,84 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../../../vendor/autoload.php';
 
 use Tourze\SRT\Control\CongestionControl;
 use Tourze\SRT\Control\FlowControl;
+use Tourze\SRT\Control\RttEstimator;
 use Tourze\SRT\Control\TimerManager;
+use Tourze\SRT\Crypto\EncryptionManager;
+use Tourze\SRT\Live\TsbpdManager;
 
-echo "=== SRT-PHP Phase 3 演示：高级特性 ===\n\n";
+echo "🚀 SRT-PHP Phase 3 高级特性演示\n";
+echo "================================\n\n";
+
+// 1. 加密功能演示
+echo "🔐 加密功能演示:\n";
+$encryptionManager = new EncryptionManager(
+    EncryptionManager::ALGO_AES_256,
+    'my_secret_passphrase'
+);
+
+$testData = "Hello, SRT World!";
+$sequenceNumber = 12345;
+
+echo "原始数据: {$testData}\n";
+
+$encrypted = $encryptionManager->encryptPacket($testData, $sequenceNumber);
+echo "加密后长度: " . strlen($encrypted) . " bytes\n";
+
+$decrypted = $encryptionManager->decryptPacket($encrypted, $sequenceNumber);
+echo "解密后数据: {$decrypted}\n";
+
+$stats = $encryptionManager->getStats();
+echo "加密统计: 加密包数={$stats['encrypted_packets']}, 解密包数={$stats['decrypted_packets']}\n\n";
+
+// 2. TSBPD Live 模式演示
+echo "⏰ TSBPD Live 模式演示:\n";
+$tsbpd = new TsbpdManager(120); // 120ms 播放延迟
+
+// 模拟添加数据包
+$currentTime = time() * 1000000; // 微秒
+$tsbpd->addPacket("Live packet 1", $currentTime, 1);
+$tsbpd->addPacket("Live packet 2", $currentTime + 50000, 2); // 50ms 后
+$tsbpd->addPacket("Live packet 3", $currentTime + 100000, 3); // 100ms 后
+
+echo "队列中包数量: " . $tsbpd->getQueueSize() . "\n";
+echo "播放延迟: " . $tsbpd->getPlaybackDelay() . "ms\n";
+
+$stats = $tsbpd->getStats();
+echo "TSBPD 统计: 播放延迟={$stats['playback_delay_ms']}ms, 队列大小={$stats['queue_size']}\n\n";
+
+// 3. RTT 估算器演示
+echo "📊 RTT 估算器演示:\n";
+$rttEstimator = new RttEstimator();
+
+// 模拟 RTT 测量
+$rttMeasurements = [25000, 30000, 28000, 35000, 32000]; // 微秒
+foreach ($rttMeasurements as $rtt) {
+    $rttEstimator->updateRtt($rtt);
+}
+
+echo "当前 RTT: " . ($rttEstimator->getCurrentRtt() / 1000) . "ms\n";
+echo "平滑 RTT: " . round($rttEstimator->getSmoothedRtt() / 1000, 2) . "ms\n";
+echo "网络条件: " . $rttEstimator->getNetworkCondition() . "\n";
+echo "稳定性评分: " . $rttEstimator->getStabilityScore() . "/100\n";
+echo "建议窗口大小: " . $rttEstimator->getSuggestedWindowSize(1000000) . " 包\n\n";
+
+// 4. 拥塞控制演示
+echo "🚦 拥塞控制演示:\n";
+$congestionControl = new CongestionControl();
+
+// 模拟网络事件
+$congestionControl->updateRtt(30000); // 30ms RTT
+$congestionControl->onPacketSent();
+$congestionControl->onPacketAcked();
+
+echo "发送速率: " . round($congestionControl->getSendingRate() / 1000000, 2) . " MB/s\n";
+echo "拥塞窗口: " . round($congestionControl->getCongestionWindow(), 2) . " 包\n";
+echo "网络状况: " . $congestionControl->getNetworkCondition() . "\n";
+echo "是否慢启动: " . ($congestionControl->isInSlowStart() ? '是' : '否') . "\n\n";
 
 // 1. 流量控制演示
 echo "1. 流量控制演示\n";
@@ -292,4 +363,7 @@ echo "✅ 流量控制 - 窗口管理和速率限制\n";
 echo "✅ 拥塞控制 - AIMD算法和RTT估算\n";
 echo "✅ 定时器管理 - 重传、保活、ACK/NAK定时器\n";
 echo "✅ 统计监控 - 详细的性能和状态统计\n";
-echo "✅ 自适应调节 - 基于网络状况的动态调整\n"; 
+echo "✅ 自适应调节 - 基于网络状况的动态调整\n";
+
+echo "✅ Phase 3 高级特性演示完成!\n";
+echo "包含功能: 加密安全、Live 模式 TSBPD、RTT 估算、拥塞控制\n"; 

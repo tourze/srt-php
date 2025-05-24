@@ -6,9 +6,9 @@ namespace Tourze\SRT\Protocol;
 
 /**
  * SRT 控制包
- * 
+ *
  * 定义 SRT 控制包的结构和操作方法，包括 ACK/NAK/KEEPALIVE 等
- * 
+ *
  * @see https://datatracker.ietf.org/doc/html/draft-sharabayko-srt-01#section-3.2
  */
 class ControlPacket
@@ -24,21 +24,21 @@ class ControlPacket
     public const TYPE_DROP_REQUEST = 0x0007;
     public const TYPE_PEER_ERROR = 0x0008;
     public const TYPE_USER_DEFINED = 0x7FFF;
-    
+
     private int $controlType = 0;
     private int $subType = 0;
     private int $additionalInfo = 0;
     private int $timestamp = 0;
     private int $destinationSocketId = 0;
     private string $controlInformation = '';
-    
+
     public function __construct(int $controlType = 0, string $controlInformation = '')
     {
         $this->controlType = $controlType;
         $this->controlInformation = $controlInformation;
         $this->timestamp = $this->getCurrentTimestamp();
     }
-    
+
     /**
      * 设置控制类型
      */
@@ -46,7 +46,7 @@ class ControlPacket
     {
         $this->controlType = $type & 0x7FFF; // 15 位
     }
-    
+
     /**
      * 获取控制类型
      */
@@ -54,7 +54,7 @@ class ControlPacket
     {
         return $this->controlType;
     }
-    
+
     /**
      * 设置子类型
      */
@@ -62,7 +62,7 @@ class ControlPacket
     {
         $this->subType = $subType & 0xFFFF; // 16 位
     }
-    
+
     /**
      * 获取子类型
      */
@@ -70,7 +70,7 @@ class ControlPacket
     {
         return $this->subType;
     }
-    
+
     /**
      * 设置附加信息
      */
@@ -78,7 +78,7 @@ class ControlPacket
     {
         $this->additionalInfo = $info;
     }
-    
+
     /**
      * 获取附加信息
      */
@@ -86,7 +86,7 @@ class ControlPacket
     {
         return $this->additionalInfo;
     }
-    
+
     /**
      * 设置时间戳
      */
@@ -94,7 +94,7 @@ class ControlPacket
     {
         $this->timestamp = $timestamp;
     }
-    
+
     /**
      * 获取时间戳
      */
@@ -102,7 +102,7 @@ class ControlPacket
     {
         return $this->timestamp;
     }
-    
+
     /**
      * 设置目标 Socket ID
      */
@@ -110,7 +110,7 @@ class ControlPacket
     {
         $this->destinationSocketId = $socketId;
     }
-    
+
     /**
      * 获取目标 Socket ID
      */
@@ -118,7 +118,7 @@ class ControlPacket
     {
         return $this->destinationSocketId;
     }
-    
+
     /**
      * 设置控制信息
      */
@@ -126,7 +126,7 @@ class ControlPacket
     {
         $this->controlInformation = $info;
     }
-    
+
     /**
      * 获取控制信息
      */
@@ -134,7 +134,7 @@ class ControlPacket
     {
         return $this->controlInformation;
     }
-    
+
     /**
      * 创建 ACK 包
      */
@@ -143,13 +143,13 @@ class ControlPacket
         $packet = new self(self::TYPE_ACK);
         $packet->setAdditionalInfo($sequenceNumber);
         $packet->setDestinationSocketId($destinationSocketId);
-        
+
         // ACK 控制信息包含接收到的最高序列号
         $packet->setControlInformation(pack('N', $sequenceNumber));
-        
+
         return $packet;
     }
-    
+
     /**
      * 创建 NAK 包
      */
@@ -157,17 +157,17 @@ class ControlPacket
     {
         $packet = new self(self::TYPE_NAK);
         $packet->setDestinationSocketId($destinationSocketId);
-        
+
         // NAK 控制信息包含丢失的序列号列表
         $nakInfo = '';
         foreach ($lostSequences as $seq) {
             $nakInfo .= pack('N', $seq);
         }
         $packet->setControlInformation($nakInfo);
-        
+
         return $packet;
     }
-    
+
     /**
      * 创建保持连接包
      */
@@ -177,7 +177,7 @@ class ControlPacket
         $packet->setDestinationSocketId($destinationSocketId);
         return $packet;
     }
-    
+
     /**
      * 创建拥塞警告包
      */
@@ -187,7 +187,7 @@ class ControlPacket
         $packet->setDestinationSocketId($destinationSocketId);
         return $packet;
     }
-    
+
     /**
      * 创建关闭连接包
      */
@@ -197,7 +197,7 @@ class ControlPacket
         $packet->setDestinationSocketId($destinationSocketId);
         return $packet;
     }
-    
+
     /**
      * 创建 ACKACK 包
      */
@@ -208,7 +208,7 @@ class ControlPacket
         $packet->setDestinationSocketId($destinationSocketId);
         return $packet;
     }
-    
+
     /**
      * 获取 NAK 丢失序列号列表
      */
@@ -217,20 +217,20 @@ class ControlPacket
         if ($this->controlType !== self::TYPE_NAK) {
             return [];
         }
-        
+
         $sequences = [];
         $data = $this->controlInformation;
         $len = strlen($data);
-        
+
         for ($i = 0; $i < $len; $i += 4) {
             if ($i + 4 <= $len) {
                 $sequences[] = unpack('N', substr($data, $i, 4))[1];
             }
         }
-        
+
         return $sequences;
     }
-    
+
     /**
      * 获取 ACK 序列号
      */
@@ -239,35 +239,35 @@ class ControlPacket
         if ($this->controlType !== self::TYPE_ACK) {
             return 0;
         }
-        
+
         return $this->additionalInfo;
     }
-    
+
     /**
      * 序列化控制包为二进制数据
      */
     public function serialize(): string
     {
         $header = '';
-        
+
         // 第一个 32 位字段：F + 控制类型 + 子类型
         $field1 = 0x80000000; // F=1 表示控制包
         $field1 |= ($this->controlType & 0x7FFF) << 16;
         $field1 |= ($this->subType & 0xFFFF);
         $header .= pack('N', $field1);
-        
+
         // 第二个 32 位字段：附加信息
         $header .= pack('N', $this->additionalInfo);
-        
+
         // 第三个 32 位字段：时间戳
         $header .= pack('N', $this->timestamp);
-        
+
         // 第四个 32 位字段：目标 Socket ID
         $header .= pack('N', $this->destinationSocketId);
-        
+
         return $header . $this->controlInformation;
     }
-    
+
     /**
      * 从二进制数据反序列化控制包
      */
@@ -276,53 +276,53 @@ class ControlPacket
         if (strlen($data) < 16) {
             throw new \InvalidArgumentException('Control packet too short');
         }
-        
+
         $pos = 0;
-        
+
         // 第一个 32 位字段
         $field1 = unpack('N', substr($data, $pos, 4))[1];
         $pos += 4;
-        
+
         $f = ($field1 >> 31) & 1;
         if ($f !== 1) {
             throw new \InvalidArgumentException('Not a control packet');
         }
-        
+
         $controlType = ($field1 >> 16) & 0x7FFF;
         $subType = $field1 & 0xFFFF;
-        
+
         // 第二个 32 位字段：附加信息
         $additionalInfo = unpack('N', substr($data, $pos, 4))[1];
         $pos += 4;
-        
+
         // 第三个 32 位字段：时间戳
         $timestamp = unpack('N', substr($data, $pos, 4))[1];
         $pos += 4;
-        
+
         // 第四个 32 位字段：目标 Socket ID
         $destinationSocketId = unpack('N', substr($data, $pos, 4))[1];
         $pos += 4;
-        
+
         // 控制信息
         $controlInformation = substr($data, $pos);
-        
+
         $packet = new self($controlType, $controlInformation);
         $packet->setSubType($subType);
         $packet->setAdditionalInfo($additionalInfo);
         $packet->setTimestamp($timestamp);
         $packet->setDestinationSocketId($destinationSocketId);
-        
+
         return $packet;
     }
-    
+
     /**
      * 获取当前时间戳（微秒）
      */
     private function getCurrentTimestamp(): int
     {
-        return (int) (hrtime(true) / 1000); // 转换为微秒
+        return (int)(hrtime(true) / 1000); // 转换为微秒
     }
-    
+
     /**
      * 获取包类型名称
      */
@@ -341,7 +341,7 @@ class ControlPacket
             default => 'UNKNOWN',
         };
     }
-    
+
     /**
      * 计算包的总大小
      */
