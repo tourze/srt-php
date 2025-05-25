@@ -5,7 +5,10 @@
   "license": "MIT",
   "require": {
     "php": "^8.1",
-    "ext-openssl": "*"
+    "ext-filter": "*",
+    "ext-hash": "*",
+    "ext-openssl": "*",
+    "ext-sodium": "*"
   },
   "require-dev": {
     "phpstan/phpstan": "^2.1",
