@@ -157,7 +157,7 @@ class EncryptionManager
 
             return $encrypted;
 
-        } catch  (\Throwable $e) {
+        } catch (\Throwable $e) {
             $this->stats['encryption_errors']++;
             throw new CryptoException('加密过程中发生错误: ' . $e->getMessage(), 0, $e);
         }
@@ -194,7 +194,7 @@ class EncryptionManager
 
             return $decrypted;
 
-        } catch  (\Throwable $e) {
+        } catch (\Throwable $e) {
             $this->stats['decryption_errors']++;
             throw new CryptoException('解密过程中发生错误: ' . $e->getMessage(), 0, $e);
         }

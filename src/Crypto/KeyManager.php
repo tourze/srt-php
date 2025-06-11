@@ -175,7 +175,7 @@ class KeyManager
         try {
             $sharedSecret = \sodium_crypto_box_beforenm($theirPublicKey, $myPrivateKey);
             return $sharedSecret;
-        } catch  (\Throwable $e) {
+        } catch (\Throwable $e) {
             throw new CryptoException('密钥交换失败: ' . $e->getMessage(), 0, $e);
         }
     }
