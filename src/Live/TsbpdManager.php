@@ -16,42 +16,42 @@ class TsbpdManager
      * 播放延迟 (微秒)
      */
     private int $playbackDelay;
-    
+
     /**
      * 基准时间戳 (微秒)
      */
     private int $baseTimestamp = 0;
-    
+
     /**
      * 本地时钟偏移 (微秒)
      */
     private int $clockOffset = 0;
-    
+
     /**
      * 时钟漂移率 (ppm)
      */
     private float $clockDriftRate = 0.0;
-    
+
     /**
      * 包投递队列
      */
     private array $deliveryQueue = [];
-    
+
     /**
      * 最后投递的时间戳
      */
     private int $lastDeliveryTime = 0;
-    
+
     /**
      * 丢包时间窗口 (微秒)
      */
     private int $dropThreshold;
-    
+
     /**
      * 是否启用延迟包丢弃
      */
     private bool $enableTooLatePacketDrop = true;
-    
+
     /**
      * 统计信息
      */
@@ -76,28 +76,28 @@ class TsbpdManager
     public function addPacket(string $data, int $timestamp, int $sequenceNumber): bool
     {
         $currentTime = $this->getCurrentTime();
-        
+
         // 初始化基准时间戳
         if ($this->baseTimestamp === 0) {
             $this->baseTimestamp = $timestamp;
             $this->lastDeliveryTime = $currentTime;
         }
-        
+
         // 计算投递时间
         $deliveryTime = $this->calculateDeliveryTime($timestamp);
-        
+
         // 检查是否太晚到达
         if ($this->enableTooLatePacketDrop && $deliveryTime < $currentTime) {
             $this->stats['packets_dropped_too_late']++;
             return false;
         }
-        
+
         // 检查是否太早到达 (时间戳错误)
         if ($deliveryTime > $currentTime + $this->playbackDelay * 10) {
             $this->stats['packets_dropped_too_early']++;
             return false;
         }
-        
+
         // 添加到投递队列
         $this->deliveryQueue[] = [
             'data' => $data,
@@ -106,12 +106,12 @@ class TsbpdManager
             'delivery_time' => $deliveryTime,
             'arrival_time' => $currentTime,
         ];
-        
+
         // 按投递时间排序
         usort($this->deliveryQueue, function ($a, $b) {
             return $a['delivery_time'] <=> $b['delivery_time'];
         });
-        
+
         return true;
     }
 
@@ -122,14 +122,14 @@ class TsbpdManager
     {
         $currentTime = $this->getCurrentTime();
         $readyPackets = [];
-        
+
         while (!empty($this->deliveryQueue)) {
             $packet = $this->deliveryQueue[0];
-            
+
             if ($packet['delivery_time'] <= $currentTime) {
                 $readyPackets[] = array_shift($this->deliveryQueue);
                 $this->stats['packets_delivered']++;
-                
+
                 // 更新统计信息
                 $deliveryDelay = $currentTime - $packet['arrival_time'];
                 $this->updateDelayStats($deliveryDelay);
@@ -137,7 +137,7 @@ class TsbpdManager
                 break;
             }
         }
-        
+
         return $readyPackets;
     }
 
@@ -148,10 +148,10 @@ class TsbpdManager
     {
         // 应用时钟漂移补偿
         $compensatedTimestamp = $this->applyClockDriftCompensation($timestamp);
-        
+
         // 计算相对于基准时间戳的偏移
         $relativeTimestamp = $compensatedTimestamp - $this->baseTimestamp;
-        
+
         // 计算投递时间 = 到达时间 + 播放延迟
         return $this->lastDeliveryTime + $relativeTimestamp + $this->playbackDelay;
     }
@@ -161,14 +161,14 @@ class TsbpdManager
      */
     private function applyClockDriftCompensation(int $timestamp): int
     {
-        if ($this->clockDriftRate === 0.0) {
+        if ($this->clockDriftRate === 0.0 && $this->clockOffset === 0) {
             return $timestamp;
         }
-        
+
         $elapsedTime = $timestamp - $this->baseTimestamp;
         $driftCorrection = (int)($elapsedTime * $this->clockDriftRate / 1000000.0);
-        
-        return $timestamp + $driftCorrection;
+
+        return $timestamp + $driftCorrection + $this->clockOffset;
     }
 
     /**
@@ -204,7 +204,7 @@ class TsbpdManager
     {
         $currentTime = $this->getCurrentTime();
         $droppedCount = 0;
-        
+
         foreach ($this->deliveryQueue as $index => $packet) {
             if ($packet['delivery_time'] < $currentTime - $this->dropThreshold) {
                 unset($this->deliveryQueue[$index]);
@@ -212,10 +212,10 @@ class TsbpdManager
                 $this->stats['packets_dropped_too_late']++;
             }
         }
-        
+
         // 重新索引数组
         $this->deliveryQueue = array_values($this->deliveryQueue);
-        
+
         return $droppedCount;
     }
 
@@ -233,10 +233,10 @@ class TsbpdManager
     private function updateDelayStats(int $delay): void
     {
         $this->stats['max_delivery_delay'] = max($this->stats['max_delivery_delay'], $delay);
-        
+
         // 计算平均延迟 (简单移动平均)
         $alpha = 0.1; // 平滑因子
-        $this->stats['average_delivery_delay'] = 
+        $this->stats['average_delivery_delay'] =
             $alpha * $delay + (1 - $alpha) * $this->stats['average_delivery_delay'];
     }
 
@@ -273,6 +273,22 @@ class TsbpdManager
     }
 
     /**
+     * 设置时钟偏移
+     */
+    public function setClockOffset(int $offsetMicroseconds): void
+    {
+        $this->clockOffset = $offsetMicroseconds;
+    }
+
+    /**
+     * 获取时钟偏移
+     */
+    public function getClockOffset(): int
+    {
+        return $this->clockOffset;
+    }
+
+    /**
      * 重置基准时间戳
      */
     public function resetBaseTimestamp(): void
@@ -287,11 +303,11 @@ class TsbpdManager
     public function getBufferDelay(): int
     {
         $nextDeliveryTime = $this->getNextDeliveryTime();
-        
+
         if ($nextDeliveryTime === null) {
             return 0;
         }
-        
+
         return max(0, $nextDeliveryTime - $this->getCurrentTime());
     }
 
@@ -324,4 +340,4 @@ class TsbpdManager
             'clock_drift_corrections' => 0,
         ];
     }
-} 
+}

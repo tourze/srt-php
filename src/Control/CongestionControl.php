@@ -118,7 +118,7 @@ class CongestionControl
         // 初始化拥塞窗口 (以包为单位)
         $this->congestionWindow = 2.0;
         $this->slowStartThreshold = 65536.0; // 64KB
-        
+
         // 初始化 RTT 估算器
         $this->rttEstimator = new RttEstimator();
     }
@@ -129,20 +129,20 @@ class CongestionControl
     public function updateRtt(int $rtt): void
     {
         $this->currentRtt = $rtt;
-        
+
         // 使用新的 RTT 估算器
         $this->rttEstimator->updateRtt($rtt);
-        
+
         // 更新平滑 RTT 和变化量
         $this->smoothedRtt = $this->rttEstimator->getSmoothedRtt();
         $this->rttVariation = $this->rttEstimator->getRttVariation();
-        
+
         // 保存RTT历史
         $this->rttHistory[] = $rtt;
         if (count($this->rttHistory) > 100) {
             array_shift($this->rttHistory);
         }
-        
+
         // 根据网络条件调整拥塞控制策略
         $this->adaptToNetworkCondition();
     }
@@ -194,11 +194,25 @@ class CongestionControl
     }
 
     /**
+     * 检查是否超过丢包率阈值
+     */
+    private function isLossRateExceeded(): bool
+    {
+        return $this->lossRate > $this->lossThreshold;
+    }
+
+    /**
      * 拥塞事件处理
      */
     private function onCongestionEvent(): void
     {
         $this->stats['congestion_events']++;
+
+        // 检查是否需要更严格的拥塞控制
+        if ($this->isLossRateExceeded()) {
+            // 当丢包率超过阈值时，采用更激进的减少策略
+            $this->multiplicativeDecrease = max(0.5, $this->multiplicativeDecrease - 0.125);
+        }
 
         // 退出慢启动
         if ($this->inSlowStart) {
@@ -232,8 +246,9 @@ class CongestionControl
      */
     private function additiveIncrease(): void
     {
-        // 每个RTT增加一个MSS
-        $this->congestionWindow += 1.0 / $this->congestionWindow;
+        // 每个RTT增加一个MSS，考虑配置的增加步长
+        $increment = min($this->additiveIncrease, 1500) / $this->congestionWindow; // 限制最大增量为一个MTU
+        $this->congestionWindow += $increment;
         $this->updateSendingRate();
         $this->stats['rate_increases']++;
     }
@@ -394,4 +409,4 @@ class CongestionControl
     {
         // 实现根据网络条件调整拥塞控制策略的逻辑
     }
-} 
+}

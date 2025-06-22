@@ -41,12 +41,12 @@ class EncryptionManager
     /**
      * 加密密钥
      */
-    private string $encryptionKey;
+    private string $encryptionKey = '';
 
     /**
      * 解密密钥 (可能与加密密钥不同)
      */
-    private string $decryptionKey;
+    private string $decryptionKey = '';
 
     /**
      * 密码短语
@@ -156,7 +156,6 @@ class EncryptionManager
             $this->keyUsageCount++;
 
             return $encrypted;
-
         } catch (\Throwable $e) {
             $this->stats['encryption_errors']++;
             throw new CryptoException('加密过程中发生错误: ' . $e->getMessage(), 0, $e);
@@ -193,7 +192,6 @@ class EncryptionManager
             $this->stats['decrypted_packets']++;
 
             return $decrypted;
-
         } catch (\Throwable $e) {
             $this->stats['decryption_errors']++;
             throw new CryptoException('解密过程中发生错误: ' . $e->getMessage(), 0, $e);
@@ -231,7 +229,7 @@ class EncryptionManager
     {
         // 使用序列号作为 IV 的一部分，确保每个包的 IV 不同但可重现
         $ivData = pack('N', $sequenceNumber) . str_repeat("\x00", 12);
-        
+
         // CTR 模式需要16字节的 IV
         return $ivData;
     }
@@ -261,11 +259,15 @@ class EncryptionManager
      */
     private function clearKeys(): void
     {
-        if (isset($this->encryptionKey)) {
-            sodium_memzero($this->encryptionKey);
+        if ($this->encryptionKey !== '') {
+            $encKey = $this->encryptionKey;
+            sodium_memzero($encKey);
+            $this->encryptionKey = '';
         }
-        if (isset($this->decryptionKey)) {
-            sodium_memzero($this->decryptionKey);
+        if ($this->decryptionKey !== '') {
+            $decKey = $this->decryptionKey;
+            sodium_memzero($decKey);
+            $this->decryptionKey = '';
         }
     }
 

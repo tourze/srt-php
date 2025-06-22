@@ -45,9 +45,7 @@ class ReceiveEngine
     private int $acksSent = 0;
     private int $naksSent = 0;
 
-    public function __construct(private readonly UdpTransport $transport)
-    {
-    }
+    public function __construct(private readonly UdpTransport $transport) {}
 
     /**
      * 处理接收到的数据包
@@ -220,9 +218,12 @@ class ReceiveEngine
             }
         }
 
-        // 检查接收缓冲区中的间隙
+        // 检查接收缓冲区中的间隙，限制检查范围到接收窗口大小
         $maxSeq = max(array_keys($this->receiveBuffer + [$this->expectedSequenceNumber => true]));
-        for ($seq = $this->expectedSequenceNumber + 1; $seq <= $maxSeq; $seq++) {
+        $windowEndSeq = $this->expectedSequenceNumber + $this->receiveWindowSize;
+        $checkUntil = min($maxSeq, $windowEndSeq);
+
+        for ($seq = $this->expectedSequenceNumber + 1; $seq <= $checkUntil; $seq++) {
             if (!isset($this->receivedSequences[$seq]) && !isset($this->receiveBuffer[$seq])) {
                 $lostSequences[] = $seq;
             }

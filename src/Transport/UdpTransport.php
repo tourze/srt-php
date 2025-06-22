@@ -13,8 +13,8 @@ use Tourze\SRT\Exception\TransportException;
  */
 class UdpTransport
 {
-    /** @var resource|null UDP Socket 资源 */
-    private $socket = null;
+    /** @var \Socket|null UDP Socket 资源 */
+    private ?\Socket $socket = null;
 
     /** @var array{host: string, port: int}|null 本地绑定地址 */
     private ?array $localAddress = null;
@@ -36,10 +36,11 @@ class UdpTransport
      */
     public function __construct()
     {
-        $this->socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
-        if ($this->socket === false) {
+        $socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+        if ($socket === false) {
             throw TransportException::socketCreationFailed(socket_strerror(socket_last_error()));
         }
+        $this->socket = $socket;
     }
 
     /**
@@ -153,7 +154,7 @@ class UdpTransport
 
     /**
      * 接收数据
-     * 
+     *
      * @return array{data: string, from: array{host: string, port: int}}|null
      */
     public function receive(int $maxLength): ?array
@@ -167,15 +168,15 @@ class UdpTransport
         $port = 0;
 
         $bytesReceived = socket_recvfrom($this->socket, $data, $maxLength, 0, $from, $port);
-        
+
         if ($bytesReceived === false) {
             $error = socket_last_error($this->socket);
-            
+
             // 对于非阻塞模式，EAGAIN/EWOULDBLOCK 不是错误
-            if ($error === SOCKET_EAGAIN || $error === SOCKET_EWOULDBLOCK) {
+            if (in_array($error, [SOCKET_EAGAIN, SOCKET_EWOULDBLOCK], true)) {
                 return null;
             }
-            
+
             $errorMsg = socket_strerror($error);
             $this->statistics['errors']++;
             throw TransportException::receiveFailed($errorMsg);
@@ -241,7 +242,7 @@ class UdpTransport
 
     /**
      * 获取本地地址
-     * 
+     *
      * @return array{host: string, port: int}|null
      */
     public function getLocalAddress(): ?array
@@ -251,7 +252,7 @@ class UdpTransport
 
     /**
      * 获取远程地址
-     * 
+     *
      * @return array{host: string, port: int}|null
      */
     public function getRemoteAddress(): ?array
@@ -261,7 +262,7 @@ class UdpTransport
 
     /**
      * 获取统计信息
-     * 
+     *
      * @return array<string, int>
      */
     public function getStatistics(): array
@@ -295,4 +296,4 @@ class UdpTransport
             $this->remoteAddress = null;
         }
     }
-} 
+}
