@@ -11,7 +11,7 @@ use Tourze\SRT\Protocol\HandshakeManager;
 
 /**
  * SRT Phase 2 功能演示
- * 
+ *
  * 演示 SRT 协议的核心功能：
  * 1. 握手协议
  * 2. 数据传输

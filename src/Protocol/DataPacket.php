@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tourze\SRT\Protocol;
 
+use Tourze\SRT\Exception\InvalidPacketException;
+
 /**
  * SRT 数据包
  *
@@ -28,7 +30,7 @@ class DataPacket
     private int $keyBasedEncryption = 0;
     private bool $retransmissionFlag = false;
     private string $payload = '';
-    
+
     public function __construct(
         int $sequenceNumber = 0,
         int $messageNumber = 0,
@@ -39,7 +41,7 @@ class DataPacket
         $this->payload = $payload;
         $this->timestamp = $this->getCurrentTimestamp();
     }
-    
+
     /**
      * 设置序列号
      */
@@ -47,7 +49,7 @@ class DataPacket
     {
         $this->sequenceNumber = $sequenceNumber & 0x7FFFFFFF; // 31 位
     }
-    
+
     /**
      * 获取序列号
      */
@@ -55,7 +57,7 @@ class DataPacket
     {
         return $this->sequenceNumber;
     }
-    
+
     /**
      * 设置消息号
      */
@@ -63,7 +65,7 @@ class DataPacket
     {
         $this->messageNumber = $messageNumber & 0x1FFFFFF; // 25 位
     }
-    
+
     /**
      * 获取消息号
      */
@@ -71,7 +73,7 @@ class DataPacket
     {
         return $this->messageNumber;
     }
-    
+
     /**
      * 设置时间戳
      */
@@ -79,7 +81,7 @@ class DataPacket
     {
         $this->timestamp = $timestamp;
     }
-    
+
     /**
      * 获取时间戳
      */
@@ -87,7 +89,7 @@ class DataPacket
     {
         return $this->timestamp;
     }
-    
+
     /**
      * 设置目标 Socket ID
      */
@@ -95,7 +97,7 @@ class DataPacket
     {
         $this->destinationSocketId = $socketId;
     }
-    
+
     /**
      * 获取目标 Socket ID
      */
@@ -103,7 +105,7 @@ class DataPacket
     {
         return $this->destinationSocketId;
     }
-    
+
     /**
      * 设置包位置标志
      */
@@ -111,7 +113,7 @@ class DataPacket
     {
         $this->packetPosition = $position & 0b11;
     }
-    
+
     /**
      * 获取包位置标志
      */
@@ -119,7 +121,7 @@ class DataPacket
     {
         return $this->packetPosition;
     }
-    
+
     /**
      * 设置有序标志
      */
@@ -127,7 +129,7 @@ class DataPacket
     {
         $this->orderFlag = $ordered;
     }
-    
+
     /**
      * 获取有序标志
      */
@@ -135,7 +137,7 @@ class DataPacket
     {
         return $this->orderFlag;
     }
-    
+
     /**
      * 设置密钥加密标志
      */
@@ -143,7 +145,7 @@ class DataPacket
     {
         $this->keyBasedEncryption = $kek & 0b11;
     }
-    
+
     /**
      * 获取密钥加密标志
      */
@@ -151,7 +153,7 @@ class DataPacket
     {
         return $this->keyBasedEncryption;
     }
-    
+
     /**
      * 设置重传标志
      */
@@ -159,7 +161,7 @@ class DataPacket
     {
         $this->retransmissionFlag = $retransmit;
     }
-    
+
     /**
      * 获取重传标志
      */
@@ -167,7 +169,7 @@ class DataPacket
     {
         return $this->retransmissionFlag;
     }
-    
+
     /**
      * 设置载荷数据
      */
@@ -175,7 +177,7 @@ class DataPacket
     {
         $this->payload = $payload;
     }
-    
+
     /**
      * 获取载荷数据
      */
@@ -183,7 +185,7 @@ class DataPacket
     {
         return $this->payload;
     }
-    
+
     /**
      * 获取载荷长度
      */
@@ -191,7 +193,7 @@ class DataPacket
     {
         return strlen($this->payload);
     }
-    
+
     /**
      * 是否为单独包
      */
@@ -199,7 +201,7 @@ class DataPacket
     {
         return $this->packetPosition === self::PP_SINGLE;
     }
-    
+
     /**
      * 是否为首包
      */
@@ -207,7 +209,7 @@ class DataPacket
     {
         return $this->packetPosition === self::PP_FIRST;
     }
-    
+
     /**
      * 是否为末包
      */
@@ -215,19 +217,19 @@ class DataPacket
     {
         return $this->packetPosition === self::PP_LAST;
     }
-    
+
     /**
      * 序列化数据包为二进制数据
      */
     public function serialize(): string
     {
         $header = '';
-        
+
         // 第一个 32 位字段：F + 序列号
         $field1 = 0; // F=0 表示数据包
         $field1 |= ($this->sequenceNumber & 0x7FFFFFFF);
         $header .= pack('N', $field1);
-        
+
         // 第二个 32 位字段：PP + O + KK + R + 消息号
         $field2 = 0;
         $field2 |= ($this->packetPosition & 0b11) << 30;
@@ -236,59 +238,59 @@ class DataPacket
         $field2 |= ($this->retransmissionFlag ? 1 : 0) << 26;
         $field2 |= ($this->messageNumber & 0x1FFFFFF);
         $header .= pack('N', $field2);
-        
+
         // 第三个 32 位字段：时间戳
         $header .= pack('N', $this->timestamp);
-        
+
         // 第四个 32 位字段：目标 Socket ID
         $header .= pack('N', $this->destinationSocketId);
-        
+
         return $header . $this->payload;
     }
-    
+
     /**
      * 从二进制数据反序列化数据包
      */
     public static function deserialize(string $data): self
     {
         if (strlen($data) < 16) {
-            throw new \InvalidArgumentException('Data packet too short');
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
         }
-        
+
         $pos = 0;
-        
+
         // 第一个 32 位字段
         $field1 = unpack('N', substr($data, $pos, 4))[1];
         $pos += 4;
-        
+
         $f = ($field1 >> 31) & 1;
         if ($f !== 0) {
-            throw new \InvalidArgumentException('Not a data packet');
+            throw InvalidPacketException::invalidControlType($field1);
         }
-        
+
         $sequenceNumber = $field1 & 0x7FFFFFFF;
-        
+
         // 第二个 32 位字段
         $field2 = unpack('N', substr($data, $pos, 4))[1];
         $pos += 4;
-        
+
         $packetPosition = ($field2 >> 30) & 0b11;
         $orderFlag = (($field2 >> 29) & 1) === 1;
         $keyBasedEncryption = ($field2 >> 27) & 0b11;
         $retransmissionFlag = (($field2 >> 26) & 1) === 1;
         $messageNumber = $field2 & 0x1FFFFFF;
-        
+
         // 第三个 32 位字段：时间戳
         $timestamp = unpack('N', substr($data, $pos, 4))[1];
         $pos += 4;
-        
+
         // 第四个 32 位字段：目标 Socket ID
         $destinationSocketId = unpack('N', substr($data, $pos, 4))[1];
         $pos += 4;
-        
+
         // 载荷数据
         $payload = substr($data, $pos);
-        
+
         $packet = new self($sequenceNumber, $messageNumber, $payload);
         $packet->setTimestamp($timestamp);
         $packet->setDestinationSocketId($destinationSocketId);
@@ -296,10 +298,10 @@ class DataPacket
         $packet->setOrderFlag($orderFlag);
         $packet->setKeyBasedEncryption($keyBasedEncryption);
         $packet->setRetransmissionFlag($retransmissionFlag);
-        
+
         return $packet;
     }
-    
+
     /**
      * 获取当前时间戳（微秒）
      */
@@ -307,7 +309,7 @@ class DataPacket
     {
         return (int) (hrtime(true) / 1000); // 转换为微秒
     }
-    
+
     /**
      * 计算包的总大小
      */

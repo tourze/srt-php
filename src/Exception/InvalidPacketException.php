@@ -8,7 +8,7 @@ use InvalidArgumentException;
 
 /**
  * SRT 包格式无效异常
- * 
+ *
  * 当解析或构造 SRT 包时遇到格式错误时抛出此异常
  */
 class InvalidPacketException extends InvalidArgumentException

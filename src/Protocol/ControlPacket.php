@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tourze\SRT\Protocol;
 
+use Tourze\SRT\Exception\InvalidPacketException;
+
 /**
  * SRT 控制包
  *
@@ -274,7 +276,7 @@ class ControlPacket
     public static function deserialize(string $data): self
     {
         if (strlen($data) < 16) {
-            throw new \InvalidArgumentException('Control packet too short');
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
         }
 
         $pos = 0;
@@ -285,7 +287,7 @@ class ControlPacket
 
         $f = ($field1 >> 31) & 1;
         if ($f !== 1) {
-            throw new \InvalidArgumentException('Not a control packet');
+            throw InvalidPacketException::invalidControlType($field1);
         }
 
         $controlType = ($field1 >> 16) & 0x7FFF;

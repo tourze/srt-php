@@ -10,7 +10,7 @@ use Tourze\SRT\Protocol\PacketHeader;
 
 /**
  * SRT 包头处理测试
- * 
+ *
  * 测试 SRT 数据包头部的解析和构建功能
  */
 final class PacketHeaderTest extends TestCase

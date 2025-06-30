@@ -4,32 +4,11 @@ declare(strict_types=1);
 
 namespace Tourze\SRT\Control;
 
-/**
- * 定时器结构
- */
-class Timer
-{
-    private $callback;
-    
-    public function __construct(
-        public readonly string $id,
-        public readonly string $type,
-        public readonly int $expireTime,
-        callable $callback,
-        public readonly array $data = []
-    ) {
-        $this->callback = $callback;
-    }
-    
-    public function getCallback(): callable
-    {
-        return $this->callback;
-    }
-}
+use Tourze\SRT\Exception\InvalidTimerException;
 
 /**
  * SRT 定时器管理器
- * 
+ *
  * 管理SRT协议中的各种定时器：
  * - 重传定时器 (Retransmission Timer)
  * - 保活定时器 (Keepalive Timer)
@@ -51,12 +30,12 @@ class TimerManager
      * 活跃定时器列表
      */
     private array $timers = [];
-    
+
     /**
      * 定时器回调函数
      */
     private array $callbacks = [];
-    
+
     /**
      * 默认超时时间 (微秒)
      */
@@ -67,7 +46,7 @@ class TimerManager
         self::TIMER_NAK => 20000,              // 20毫秒
         self::TIMER_HANDSHAKE => 5000000,      // 5秒
     ];
-    
+
     /**
      * 定时器统计
      */
@@ -98,12 +77,12 @@ class TimerManager
     ): void {
         $timeout = $timeout ?? $this->defaultTimeouts[$type] ?? 1000000;
         $expireTime = (int)(microtime(true) * 1000000) + $timeout;
-        
+
         $callback = $callback ?? $this->callbacks[$type] ?? null;
         if ($callback === null) {
-            throw new \InvalidArgumentException("No callback set for timer type: {$type}");
+            throw InvalidTimerException::noCallbackSet($type);
         }
-        
+
         $this->timers[$id] = new Timer($id, $type, $expireTime, $callback, $data);
         $this->stats['timers_created']++;
     }
@@ -128,18 +107,18 @@ class TimerManager
     {
         $currentTime = (int)(microtime(true) * 1000000);
         $expiredTimers = [];
-        
+
         foreach ($this->timers as $id => $timer) {
             if ($currentTime >= $timer->expireTime) {
                 $expiredTimers[] = $timer;
                 unset($this->timers[$id]);
                 $this->stats['timers_expired']++;
-                
+
                 // 更新类型统计
                 $this->updateTypeStats($timer->type);
             }
         }
-        
+
         // 执行过期定时器的回调
         foreach ($expiredTimers as $timer) {
             try {
@@ -149,7 +128,7 @@ class TimerManager
                 error_log("Timer callback error: " . $e->getMessage());
             }
         }
-        
+
         return array_map(fn($timer) => [
             'id' => $timer->id,
             'type' => $timer->type,
@@ -276,7 +255,7 @@ class TimerManager
         if (empty($this->timers)) {
             return null;
         }
-        
+
         $minExpireTime = min(array_map(fn($timer) => $timer->expireTime, $this->timers));
         return $minExpireTime;
     }
@@ -290,7 +269,7 @@ class TimerManager
         if ($nextExpire === null) {
             return null;
         }
-        
+
         $currentTime = (int)(microtime(true) * 1000000);
         return max(0, $nextExpire - $currentTime);
     }
@@ -311,10 +290,10 @@ class TimerManager
         if (!isset($this->timers[$id])) {
             return null;
         }
-        
+
         $timer = $this->timers[$id];
         $currentTime = (int)(microtime(true) * 1000000);
-        
+
         return [
             'id' => $timer->id,
             'type' => $timer->type,

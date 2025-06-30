@@ -6,7 +6,7 @@ namespace Tourze\SRT\Control;
 
 /**
  * RTT (Round Trip Time) 估算器
- * 
+ *
  * 实现精确的往返时间测量和网络性能分析，包括：
  * - RTT 平滑算法 (RFC 6298)
  * - 网络抖动测量

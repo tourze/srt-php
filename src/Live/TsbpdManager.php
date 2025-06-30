@@ -6,7 +6,7 @@ namespace Tourze\SRT\Live;
 
 /**
  * TSBPD (Time Stamp Based Packet Delivery) 管理器
- * 
+ *
  * 实现基于时间戳的数据包投递，用于控制 SRT Live 模式的播放延迟
  * 确保数据包按照正确的时间顺序投递，维持恒定的播放延迟
  */

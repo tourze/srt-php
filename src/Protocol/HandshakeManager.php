@@ -8,13 +8,13 @@ use Tourze\SRT\Exception\HandshakeException;
 
 /**
  * SRT 握手管理器
- * 
+ *
  * 负责处理 SRT 连接的握手流程，包括：
  * - Caller-Listener 握手
  * - Rendezvous 握手  
  * - 加密协商
  * - 能力交换
- * 
+ *
  * @see https://datatracker.ietf.org/doc/html/draft-sharabayko-srt-01#section-3
  */
 class HandshakeManager

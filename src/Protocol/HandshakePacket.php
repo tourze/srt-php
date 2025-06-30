@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tourze\SRT\Protocol;
 
+use Tourze\SRT\Exception\InvalidPacketException;
+
 /**
  * SRT 握手包
  *
@@ -215,7 +217,7 @@ class HandshakePacket
 
         // 对端 IP 地址 (4 bytes - 简化为 32 位整数)
         $ipInt = $this->peerIpAddress === '0.0.0.0' ? 0 : ip2long($this->peerIpAddress);
-        $data .= pack('N', $ipInt ?: 0);
+        $data .= pack('N', $ipInt !== false ? $ipInt : 0);
 
         // SRT 扩展数据
         if (!empty($this->srtExtensions)) {
@@ -231,7 +233,7 @@ class HandshakePacket
     public static function deserialize(string $data): self
     {
         if (strlen($data) < 32) {
-            throw new \InvalidArgumentException('Handshake packet too short');
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
         }
 
         $packet = new self();
