@@ -43,27 +43,33 @@ class PacketHeader
         private readonly int $field2,           // 消息相关字段 或 类型特定信息
         private readonly int $timestamp,
         private readonly int $destinationSocketId,
-        private readonly int $subtype = 0       // 仅控制包使用
-    ) {}
+        private readonly int $subtype = 0,       // 仅控制包使用
+    ) {
+    }
 
     /**
      * 从二进制数据解析包头
      */
     public static function fromBinary(string $data): self
     {
-        if (strlen($data) !== 16) {
+        if (16 !== strlen($data)) {
             throw InvalidPacketException::invalidHeaderLength(strlen($data));
         }
 
         $fields = unpack('N4', $data);
-        if ($fields === false) {
+        if (false === $fields || count($fields) < 4) {
             throw new InvalidPacketException('Failed to unpack SRT header');
         }
 
-        $field1 = $fields[1];
-        $field2 = $fields[2];
-        $timestamp = $fields[3];
-        $destId = $fields[4];
+        $values = array_values($fields);
+        $field1 = $values[0];
+        assert(is_int($field1));
+        $field2 = $values[1];
+        assert(is_int($field2));
+        $timestamp = $values[2];
+        assert(is_int($timestamp));
+        $destId = $values[3];
+        assert(is_int($destId));
 
         $isControlPacket = ($field1 & 0x80000000) !== 0;
 
@@ -81,32 +87,31 @@ class PacketHeader
                 destinationSocketId: $destId,
                 subtype: $subtype
             );
-        } else {
-            // 数据包：保持原始字段值，在getter中解析
-            return new self(
-                isControlPacket: false,
-                field1: $field1,
-                field2: $field2,
-                timestamp: $timestamp,
-                destinationSocketId: $destId
-            );
         }
+
+        // 数据包：保持原始字段值，在getter中解析
+        return new self(
+            isControlPacket: false,
+            field1: $field1,
+            field2: $field2,
+            timestamp: $timestamp,
+            destinationSocketId: $destId
+        );
     }
 
     /**
      * 创建数据包头部
      */
     public static function createDataPacket(
-        int  $sequenceNumber,
-        int  $packetPosition,
+        int $sequenceNumber,
+        int $packetPosition,
         bool $isOrdered,
-        int  $encryptionFlags,
+        int $encryptionFlags,
         bool $isRetransmitted,
-        int  $messageNumber,
-        int  $timestamp,
-        int  $destinationSocketId
-    ): self
-    {
+        int $messageNumber,
+        int $timestamp,
+        int $destinationSocketId,
+    ): self {
         self::validateDataPacketFields($sequenceNumber, $packetPosition, $encryptionFlags, $messageNumber);
 
         // 构建第一个字段：F(0) + 序列号(31位)
@@ -136,9 +141,8 @@ class PacketHeader
         int $subtype,
         int $typeSpecificInfo,
         int $timestamp,
-        int $destinationSocketId
-    ): self
-    {
+        int $destinationSocketId,
+    ): self {
         return new self(
             isControlPacket: true,
             field1: $controlType,      // 只存储控制类型
@@ -177,6 +181,7 @@ class PacketHeader
         if ($this->isControlPacket) {
             throw new InvalidPacketException('Control packets do not have sequence numbers');
         }
+
         return $this->field1 & 0x7FFFFFFF;
     }
 
@@ -185,6 +190,7 @@ class PacketHeader
         if (!$this->isControlPacket) {
             throw new InvalidPacketException('Data packets do not have control types');
         }
+
         return $this->field1;  // field1 直接存储控制类型
     }
 
@@ -193,6 +199,7 @@ class PacketHeader
         if (!$this->isControlPacket) {
             throw new InvalidPacketException('Data packets do not have subtypes');
         }
+
         return $this->subtype;
     }
 
@@ -201,6 +208,7 @@ class PacketHeader
         if ($this->isControlPacket) {
             throw new InvalidPacketException('Control packets do not have packet positions');
         }
+
         return ($this->field2 >> 30) & 0x3;
     }
 
@@ -209,6 +217,7 @@ class PacketHeader
         if ($this->isControlPacket) {
             throw new InvalidPacketException('Control packets do not have order flags');
         }
+
         return (($this->field2 >> 29) & 0x1) === 1;
     }
 
@@ -217,6 +226,7 @@ class PacketHeader
         if ($this->isControlPacket) {
             throw new InvalidPacketException('Control packets do not have encryption flags');
         }
+
         return ($this->field2 >> 27) & 0x3;
     }
 
@@ -225,6 +235,7 @@ class PacketHeader
         if ($this->isControlPacket) {
             throw new InvalidPacketException('Control packets do not have retransmission flags');
         }
+
         return (($this->field2 >> 26) & 0x1) === 1;
     }
 
@@ -233,6 +244,7 @@ class PacketHeader
         if ($this->isControlPacket) {
             throw new InvalidPacketException('Control packets do not have message numbers');
         }
+
         return $this->field2 & 0x3FFFFFF;
     }
 
@@ -241,6 +253,7 @@ class PacketHeader
         if (!$this->isControlPacket) {
             throw new InvalidPacketException('Data packets do not have type-specific info');
         }
+
         return $this->field2;
     }
 
@@ -261,9 +274,8 @@ class PacketHeader
         int $sequenceNumber,
         int $packetPosition,
         int $encryptionFlags,
-        int $messageNumber
-    ): void
-    {
+        int $messageNumber,
+    ): void {
         if ($sequenceNumber < 0 || $sequenceNumber > 0x7FFFFFFF) {
             throw InvalidPacketException::invalidSequenceNumber($sequenceNumber);
         }

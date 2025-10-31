@@ -21,13 +21,13 @@ $encryptionManager = new EncryptionManager(
     'my_secret_passphrase'
 );
 
-$testData = "Hello, SRT World!";
+$testData = 'Hello, SRT World!';
 $sequenceNumber = 12345;
 
 echo "原始数据: {$testData}\n";
 
 $encrypted = $encryptionManager->encryptPacket($testData, $sequenceNumber);
-echo "加密后长度: " . strlen($encrypted) . " bytes\n";
+echo '加密后长度: ' . strlen($encrypted) . " bytes\n";
 
 $decrypted = $encryptionManager->decryptPacket($encrypted, $sequenceNumber);
 echo "解密后数据: {$decrypted}\n";
@@ -41,12 +41,12 @@ $tsbpd = new TsbpdManager(120); // 120ms 播放延迟
 
 // 模拟添加数据包
 $currentTime = time() * 1000000; // 微秒
-$tsbpd->addPacket("Live packet 1", $currentTime, 1);
-$tsbpd->addPacket("Live packet 2", $currentTime + 50000, 2); // 50ms 后
-$tsbpd->addPacket("Live packet 3", $currentTime + 100000, 3); // 100ms 后
+$tsbpd->addPacket('Live packet 1', $currentTime, 1);
+$tsbpd->addPacket('Live packet 2', $currentTime + 50000, 2); // 50ms 后
+$tsbpd->addPacket('Live packet 3', $currentTime + 100000, 3); // 100ms 后
 
-echo "队列中包数量: " . $tsbpd->getQueueSize() . "\n";
-echo "播放延迟: " . $tsbpd->getPlaybackDelay() . "ms\n";
+echo '队列中包数量: ' . $tsbpd->getQueueSize() . "\n";
+echo '播放延迟: ' . $tsbpd->getPlaybackDelay() . "ms\n";
 
 $stats = $tsbpd->getStats();
 echo "TSBPD 统计: 播放延迟={$stats['playback_delay_ms']}ms, 队列大小={$stats['queue_size']}\n\n";
@@ -61,11 +61,11 @@ foreach ($rttMeasurements as $rtt) {
     $rttEstimator->updateRtt($rtt);
 }
 
-echo "当前 RTT: " . ($rttEstimator->getCurrentRtt() / 1000) . "ms\n";
-echo "平滑 RTT: " . round($rttEstimator->getSmoothedRtt() / 1000, 2) . "ms\n";
-echo "网络条件: " . $rttEstimator->getNetworkCondition() . "\n";
-echo "稳定性评分: " . $rttEstimator->getStabilityScore() . "/100\n";
-echo "建议窗口大小: " . $rttEstimator->getSuggestedWindowSize(1000000) . " 包\n\n";
+echo '当前 RTT: ' . ($rttEstimator->getCurrentRtt() / 1000) . "ms\n";
+echo '平滑 RTT: ' . round($rttEstimator->getSmoothedRtt() / 1000, 2) . "ms\n";
+echo '网络条件: ' . $rttEstimator->getNetworkCondition() . "\n";
+echo '稳定性评分: ' . $rttEstimator->getStabilityScore() . "/100\n";
+echo '建议窗口大小: ' . $rttEstimator->getSuggestedWindowSize(1000000) . " 包\n\n";
 
 // 4. 拥塞控制演示
 echo "🚦 拥塞控制演示:\n";
@@ -76,10 +76,10 @@ $congestionControl->updateRtt(30000); // 30ms RTT
 $congestionControl->onPacketSent();
 $congestionControl->onPacketAcked();
 
-echo "发送速率: " . round($congestionControl->getSendingRate() / 1000000, 2) . " MB/s\n";
-echo "拥塞窗口: " . round($congestionControl->getCongestionWindow(), 2) . " 包\n";
-echo "网络状况: " . $congestionControl->getNetworkCondition() . "\n";
-echo "是否慢启动: " . ($congestionControl->isInSlowStart() ? '是' : '否') . "\n\n";
+echo '发送速率: ' . round($congestionControl->getSendingRate() / 1000000, 2) . " MB/s\n";
+echo '拥塞窗口: ' . round($congestionControl->getCongestionWindow(), 2) . " 包\n";
+echo '网络状况: ' . $congestionControl->getNetworkCondition() . "\n";
+echo '是否慢启动: ' . ($congestionControl->isInSlowStart() ? '是' : '否') . "\n\n";
 
 // 1. 流量控制演示
 echo "1. 流量控制演示\n";
@@ -94,30 +94,30 @@ $flowControl = new FlowControl(
 echo "初始状态:\n";
 $stats = $flowControl->getStats();
 printf("- 发送窗口大小: %d\n", $stats['send_window_size']);
-printf("- 当前发送速率: %d bytes/s (%.2f MB/s)\n", 
-    $stats['current_send_rate'], 
+printf("- 当前发送速率: %d bytes/s (%.2f MB/s)\n",
+    $stats['current_send_rate'],
     $stats['current_send_rate'] / 1024 / 1024
 );
 printf("- 窗口利用率: %.2f%%\n", $stats['window_utilization'] * 100);
 printf("- 令牌桶利用率: %.2f%%\n", $stats['token_bucket_utilization'] * 100);
 
 echo "\n模拟数据包发送:\n";
-for ($i = 0; $i < 10; $i++) {
+for ($i = 0; $i < 10; ++$i) {
     $packetSize = 1500; // 标准以太网MTU
-    
+
     if ($flowControl->canSend($packetSize)) {
         $flowControl->onPacketSent($packetSize);
         echo "✓ 包 #{$i} 发送成功 ({$packetSize} bytes)\n";
     } else {
         echo "✗ 包 #{$i} 被流量控制阻止\n";
     }
-    
+
     // 模拟一些包的确认
-    if ($i % 3 === 0 && $i > 0) {
+    if (0 === $i % 3 && $i > 0) {
         $flowControl->onPacketAcked(2);
         echo "  → 收到2个包的ACK确认\n";
     }
-    
+
     usleep(1000); // 1ms延迟
 }
 
@@ -140,8 +140,8 @@ $congestionControl = new CongestionControl(
 
 echo "初始状态:\n";
 $stats = $congestionControl->getStats();
-printf("- 发送速率: %d bytes/s (%.2f MB/s)\n", 
-    $stats['sending_rate'], 
+printf("- 发送速率: %d bytes/s (%.2f MB/s)\n",
+    $stats['sending_rate'],
     $stats['sending_rate'] / 1024 / 1024
 );
 printf("- 拥塞窗口: %.2f\n", $stats['congestion_window']);
@@ -151,12 +151,12 @@ printf("- 网络状况: %s\n", $stats['network_condition']);
 echo "\n模拟网络传输:\n";
 
 // 模拟正常传输
-for ($i = 0; $i < 5; $i++) {
+for ($i = 0; $i < 5; ++$i) {
     $congestionControl->onPacketSent();
     $rtt = 50000 + rand(-10000, 10000); // 50ms ± 10ms RTT
     $congestionControl->updateRtt($rtt);
     $congestionControl->onPacketAcked();
-    
+
     printf("包 #%d: RTT=%.1fms, 速率=%.2fMB/s, 窗口=%.2f\n",
         $i + 1,
         $rtt / 1000,
@@ -177,12 +177,12 @@ printf("丢包后: 速率=%.2fMB/s, 窗口=%.2f, 慢启动=%s\n",
 
 // 模拟网络恢复
 echo "\n模拟网络恢复:\n";
-for ($i = 0; $i < 3; $i++) {
+for ($i = 0; $i < 3; ++$i) {
     $congestionControl->onPacketSent();
     $rtt = 45000 + rand(-5000, 5000); // 更好的RTT
     $congestionControl->updateRtt($rtt);
     $congestionControl->onPacketAcked();
-    
+
     printf("恢复包 #%d: RTT=%.1fms, 速率=%.2fMB/s\n",
         $i + 1,
         $rtt / 1000,
@@ -205,19 +205,19 @@ echo "================\n";
 $timerManager = new TimerManager();
 
 // 设置定时器回调
-$timerManager->setCallback(TimerManager::TIMER_RETRANSMISSION, function($id, $type, $data) {
+$timerManager->setCallback(TimerManager::TIMER_RETRANSMISSION, function ($id, $type, $data): void {
     echo "🔄 重传定时器触发: {$id}\n";
 });
 
-$timerManager->setCallback(TimerManager::TIMER_KEEPALIVE, function($id, $type, $data) {
+$timerManager->setCallback(TimerManager::TIMER_KEEPALIVE, function ($id, $type, $data): void {
     echo "💓 保活定时器触发: {$id}\n";
 });
 
-$timerManager->setCallback(TimerManager::TIMER_ACK, function($id, $type, $data) {
+$timerManager->setCallback(TimerManager::TIMER_ACK, function ($id, $type, $data): void {
     echo "✅ ACK定时器触发: {$id}, 序列号: {$data['sequence_number']}\n";
 });
 
-$timerManager->setCallback(TimerManager::TIMER_NAK, function($id, $type, $data) {
+$timerManager->setCallback(TimerManager::TIMER_NAK, function ($id, $type, $data): void {
     echo "❌ NAK定时器触发: {$id}, 丢失序列号: " . implode(',', $data['lost_sequences']) . "\n";
 });
 
@@ -247,7 +247,7 @@ printf("- 保活定时器: %d\n", $stats['active_keepalive_timers']);
 printf("- ACK定时器: %d\n", $stats['active_ack_timers']);
 printf("- NAK定时器: %d\n", $stats['active_nak_timers']);
 
-if ($stats['time_to_next_expire'] !== null) {
+if (null !== $stats['time_to_next_expire']) {
     printf("- 下次过期时间: %.1fms\n", $stats['time_to_next_expire'] / 1000);
 }
 
@@ -257,13 +257,13 @@ echo "\n等待定时器触发...\n";
 $startTime = microtime(true);
 while (microtime(true) - $startTime < 0.3) { // 运行300ms
     $expiredTimers = $timerManager->processTick();
-    
+
     if (!empty($expiredTimers)) {
         foreach ($expiredTimers as $timer) {
             // 定时器回调已经在processTick中执行
         }
     }
-    
+
     usleep(10000); // 10ms检查间隔
 }
 
@@ -289,7 +289,7 @@ $timerManager->resetStats();
 $timerManager->clearAllTimers();
 
 // 设置定时器回调来处理重传
-$timerManager->setCallback(TimerManager::TIMER_RETRANSMISSION, function($id, $type, $data) use ($congestionControl) {
+$timerManager->setCallback(TimerManager::TIMER_RETRANSMISSION, function ($id, $type, $data) use ($congestionControl): void {
     echo "📦 重传包: {$id}\n";
     $congestionControl->onPacketLost(1);
 });
@@ -297,24 +297,24 @@ $timerManager->setCallback(TimerManager::TIMER_RETRANSMISSION, function($id, $ty
 echo "\n开始传输模拟:\n";
 $packetId = 1;
 
-for ($round = 0; $round < 5; $round++) {
+for ($round = 0; $round < 5; ++$round) {
     echo "\n--- 传输轮次 " . ($round + 1) . " ---\n";
-    
+
     // 尝试发送多个包
-    for ($i = 0; $i < 3; $i++) {
+    for ($i = 0; $i < 3; ++$i) {
         $packetSize = 1500;
-        
+
         if ($flowControl->canSend($packetSize)) {
             // 流量控制允许发送
             $flowControl->onPacketSent($packetSize);
             $congestionControl->onPacketSent();
-            
+
             // 设置重传定时器
             $rto = $congestionControl->calculateRto();
             $timerManager->setRetransmissionTimer("pkt_{$packetId}", $rto);
-            
-            echo "📤 发送包 #{$packetId} (RTO: " . ($rto/1000) . "ms)\n";
-            
+
+            echo "📤 发送包 #{$packetId} (RTO: " . ($rto / 1000) . "ms)\n";
+
             // 模拟网络延迟和可能的丢包
             if (rand(1, 10) <= 8) { // 80%成功率
                 // 包成功到达，模拟ACK
@@ -322,38 +322,38 @@ for ($round = 0; $round < 5; $round++) {
                 $congestionControl->updateRtt($rtt);
                 $congestionControl->onPacketAcked();
                 $flowControl->onPacketAcked(1);
-                
+
                 // 取消重传定时器
                 $timerManager->cancelRetransmissionTimer("pkt_{$packetId}");
-                
-                echo "  ✅ 收到ACK (RTT: " . ($rtt/1000) . "ms)\n";
+
+                echo '  ✅ 收到ACK (RTT: ' . ($rtt / 1000) . "ms)\n";
             } else {
                 echo "  ❌ 包丢失，等待重传定时器\n";
             }
-            
-            $packetId++;
+
+            ++$packetId;
         } else {
             echo "🚫 流量控制阻止发送\n";
         }
-        
+
         usleep(5000); // 5ms间隔
     }
-    
+
     // 处理定时器
     $timerManager->processTick();
-    
+
     // 显示当前状态
     $flowStats = $flowControl->getStats();
     $congStats = $congestionControl->getStats();
     $timerStats = $timerManager->getStats();
-    
+
     printf("状态: 速率=%.1fMB/s, 窗口利用率=%.1f%%, 活跃定时器=%d, 丢包率=%.1f%%\n",
         $congStats['sending_rate'] / 1024 / 1024,
         $flowStats['window_utilization'] * 100,
         $timerStats['active_timers'],
         $congStats['loss_rate'] * 100
     );
-    
+
     usleep(20000); // 20ms轮次间隔
 }
 
@@ -366,4 +366,4 @@ echo "✅ 统计监控 - 详细的性能和状态统计\n";
 echo "✅ 自适应调节 - 基于网络状况的动态调整\n";
 
 echo "✅ Phase 3 高级特性演示完成!\n";
-echo "包含功能: 加密安全、Live 模式 TSBPD、RTT 估算、拥塞控制\n"; 
+echo "包含功能: 加密安全、Live 模式 TSBPD、RTT 估算、拥塞控制\n";

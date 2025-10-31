@@ -9,16 +9,16 @@ namespace Tourze\SRT\Control;
  */
 class Timer
 {
-    private $callback;
-
+    /**
+     * @param array<string, mixed> $data
+     */
     public function __construct(
         public readonly string $id,
         public readonly string $type,
         public readonly int $expireTime,
-        callable $callback,
-        public readonly array $data = []
+        private readonly \Closure $callback,
+        public readonly array $data = [],
     ) {
-        $this->callback = $callback;
     }
 
     public function getCallback(): callable

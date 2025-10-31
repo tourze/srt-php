@@ -2,12 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Tourze\SRT\Tests\Unit\Exception;
+namespace Tourze\SRT\Tests\Exception;
 
-use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\CoversClass;
+use Tourze\PHPUnitBase\AbstractExceptionTestCase;
 use Tourze\SRT\Exception\TransportException;
 
-class TransportExceptionTest extends TestCase
+/**
+ * @internal
+ */
+#[CoversClass(TransportException::class)]
+final class TransportExceptionTest extends AbstractExceptionTestCase
 {
     public function testBindFailed(): void
     {

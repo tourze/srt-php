@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace Tourze\SRT\Tests\Protocol;
 
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Tourze\SRT\Protocol\DataPacket;
 use Tourze\SRT\Exception\InvalidPacketException;
+use Tourze\SRT\Protocol\DataPacket;
 
-class DataPacketTest extends TestCase
+/**
+ * @internal
+ */
+#[CoversClass(DataPacket::class)]
+final class DataPacketTest extends TestCase
 {
     public function testInitialState(): void
     {
@@ -20,18 +25,27 @@ class DataPacketTest extends TestCase
 
     public function testSetAndGetSequenceNumber(): void
     {
-        $packet = new DataPacket();
-        $packet->setSequenceNumber(12345);
+        // 测试通过构造函数设置序列号
+        $packet = new DataPacket(12345);
         $this->assertEquals(12345, $packet->getSequenceNumber());
+
+        // setSequenceNumber 方法现在不起作用，因为 sequenceNumber 是 readonly 的
+        $packet->setSequenceNumber(54321);
+        $this->assertEquals(12345, $packet->getSequenceNumber()); // 应该保持原值
     }
 
     public function testSetAndGetPayload(): void
     {
-        $packet = new DataPacket();
+        // 测试通过构造函数设置载荷
         $payload = 'test payload data';
-        $packet->setPayload($payload);
+        $packet = new DataPacket(0, 0, $payload);
         $this->assertEquals($payload, $packet->getPayload());
         $this->assertEquals(strlen($payload), $packet->getPayloadLength());
+
+        // setPayload 方法现在不起作用，因为 payload 是 readonly 的
+        $newPayload = 'new payload';
+        $packet->setPayload($newPayload);
+        $this->assertEquals($payload, $packet->getPayload()); // 应该保持原值
     }
 
     public function testPacketPosition(): void
@@ -48,7 +62,7 @@ class DataPacketTest extends TestCase
         $original = new DataPacket(12345, 67890, 'test data');
         $serialized = $original->serialize();
         $deserialized = DataPacket::deserialize($serialized);
-        
+
         $this->assertEquals(12345, $deserialized->getSequenceNumber());
         $this->assertEquals(67890, $deserialized->getMessageNumber());
         $this->assertEquals('test data', $deserialized->getPayload());
@@ -59,4 +73,4 @@ class DataPacketTest extends TestCase
         $this->expectException(InvalidPacketException::class);
         DataPacket::deserialize('short');
     }
-} 
+}

@@ -16,14 +16,26 @@ use Tourze\SRT\Exception\InvalidPacketException;
 class HandshakePacket
 {
     private int $version = 0;
+
     private int $encryptionField = 0;
+
     private int $extensionField = 0;
+
     private int $initialSequenceNumber = 0;
+
     private int $maxTransmissionUnitSize = 1500;
+
     private int $maxFlowWinSize = 8192;
+
     private int $handshakeType = 0;
+
     private int $srtSocketId = 0;
+
     private string $peerIpAddress = '';
+
+    /**
+     * @var array<int, mixed>
+     */
     private array $srtExtensions = [];
 
     /**
@@ -172,6 +184,7 @@ class HandshakePacket
 
     /**
      * 设置 SRT 扩展
+     * @param array<int, mixed> $extensions
      */
     public function setSrtExtensions(array $extensions): void
     {
@@ -180,6 +193,7 @@ class HandshakePacket
 
     /**
      * 获取 SRT 扩展
+     * @return array<int, mixed>
      */
     public function getSrtExtensions(): array
     {
@@ -216,11 +230,11 @@ class HandshakePacket
         $data .= pack('N', $this->srtSocketId);
 
         // 对端 IP 地址 (4 bytes - 简化为 32 位整数)
-        $ipInt = $this->peerIpAddress === '0.0.0.0' ? 0 : ip2long($this->peerIpAddress);
-        $data .= pack('N', $ipInt !== false ? $ipInt : 0);
+        $ipInt = '0.0.0.0' === $this->peerIpAddress ? 0 : ip2long($this->peerIpAddress);
+        $data .= pack('N', false !== $ipInt ? $ipInt : 0);
 
         // SRT 扩展数据
-        if (!empty($this->srtExtensions)) {
+        if ([] !== $this->srtExtensions) {
             $data .= $this->serializeExtensions();
         }
 
@@ -239,40 +253,14 @@ class HandshakePacket
         $packet = new self();
         $pos = 0;
 
-        // 版本号
-        $packet->version = unpack('N', substr($data, $pos, 4))[1];
-        $pos += 4;
-
-        // 加密和扩展字段
-        $encExt = unpack('N', substr($data, $pos, 4))[1];
-        $packet->encryptionField = ($encExt >> 24) & 0xFF;
-        $packet->extensionField = $encExt & 0xFFFFFF;
-        $pos += 4;
-
-        // 初始序列号
-        $packet->initialSequenceNumber = unpack('N', substr($data, $pos, 4))[1];
-        $pos += 4;
-
-        // MTU 大小
-        $packet->maxTransmissionUnitSize = unpack('N', substr($data, $pos, 4))[1];
-        $pos += 4;
-
-        // 流窗口大小
-        $packet->maxFlowWinSize = unpack('N', substr($data, $pos, 4))[1];
-        $pos += 4;
-
-        // 握手类型
-        $packet->handshakeType = unpack('N', substr($data, $pos, 4))[1];
-        $pos += 4;
-
-        // SRT Socket ID
-        $packet->srtSocketId = unpack('N', substr($data, $pos, 4))[1];
-        $pos += 4;
-
-        // 对端 IP 地址
-        $ipInt = unpack('N', substr($data, $pos, 4))[1];
-        $packet->peerIpAddress = $ipInt ? long2ip($ipInt) : '0.0.0.0';
-        $pos += 4;
+        $pos = $packet->deserializeVersion($data, $pos);
+        $pos = $packet->deserializeEncryptionAndExtension($data, $pos);
+        $pos = $packet->deserializeInitialSequenceNumber($data, $pos);
+        $pos = $packet->deserializeMtu($data, $pos);
+        $pos = $packet->deserializeMaxFlowWinSize($data, $pos);
+        $pos = $packet->deserializeHandshakeType($data, $pos);
+        $pos = $packet->deserializeSrtSocketId($data, $pos);
+        $pos = $packet->deserializePeerIpAddress($data, $pos);
 
         // SRT 扩展数据
         if (strlen($data) > $pos) {
@@ -314,42 +302,219 @@ class HandshakePacket
 
     /**
      * 反序列化扩展数据
+     * @return array<int, mixed>
      */
     private function deserializeExtensions(string $data): array
     {
+        /** @var array<int, mixed> $extensions */
         $extensions = [];
         $pos = 0;
         $len = strlen($data);
 
         while ($pos < $len - 4) {
-            // 扩展类型
-            $type = unpack('n', substr($data, $pos, 2))[1];
-            $pos += 2;
-
-            // 扩展长度
-            $extLen = unpack('n', substr($data, $pos, 2))[1];
-            $pos += 2;
-
-            if ($pos + $extLen > $len) {
-                break; // 数据不完整
+            $extension = $this->extractSingleExtension($data, $pos, $len);
+            if (null === $extension) {
+                break;
             }
 
-            // 扩展值
-            if ($extLen === 4) {
-                // 整数值
-                $extensions[$type] = unpack('N', substr($data, $pos, 4))[1];
-            } else {
-                // 字符串值
-                $extensions[$type] = substr($data, $pos, $extLen);
-            }
-
-            $pos += $extLen;
-
-            // 跳过对齐字节
-            $padding = (4 - ($extLen % 4)) % 4;
-            $pos += $padding;
+            [$type, $value, $newPos] = $extension;
+            $extensions[$type] = $value;
+            $pos = $newPos;
         }
 
         return $extensions;
+    }
+
+    /**
+     * 提取单个扩展数据
+     * @return array{int, mixed, int}|null
+     */
+    private function extractSingleExtension(string $data, int $pos, int $len): ?array
+    {
+        $extensionHeader = $this->parseExtensionHeader($data, $pos);
+        if (null === $extensionHeader) {
+            return null;
+        }
+
+        [$type, $extLen] = $extensionHeader;
+        $pos += 4;
+
+        if ($pos + $extLen > $len) {
+            return null;
+        }
+
+        $value = $this->parseExtensionValue($data, $pos, $extLen);
+        if (null === $value) {
+            return null;
+        }
+
+        $pos += $extLen + $this->calculatePadding($extLen);
+
+        return [$type, $value, $pos];
+    }
+
+    /**
+     * 解析版本号字段
+     */
+    private function deserializeVersion(string $data, int $pos): int
+    {
+        $versionResult = unpack('N', substr($data, $pos, 4));
+        if (false === $versionResult || !isset($versionResult[1]) || !is_int($versionResult[1])) {
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
+        }
+        $this->version = $versionResult[1];
+
+        return $pos + 4;
+    }
+
+    /**
+     * 解析加密和扩展字段
+     */
+    private function deserializeEncryptionAndExtension(string $data, int $pos): int
+    {
+        $encExtResult = unpack('N', substr($data, $pos, 4));
+        if (false === $encExtResult || !isset($encExtResult[1]) || !is_int($encExtResult[1])) {
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
+        }
+        $encExt = $encExtResult[1];
+        $this->encryptionField = ($encExt >> 24) & 0xFF;
+        $this->extensionField = $encExt & 0xFFFFFF;
+
+        return $pos + 4;
+    }
+
+    /**
+     * 解析初始序列号字段
+     */
+    private function deserializeInitialSequenceNumber(string $data, int $pos): int
+    {
+        $initialSeqResult = unpack('N', substr($data, $pos, 4));
+        if (false === $initialSeqResult || !isset($initialSeqResult[1]) || !is_int($initialSeqResult[1])) {
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
+        }
+        $this->initialSequenceNumber = $initialSeqResult[1];
+
+        return $pos + 4;
+    }
+
+    /**
+     * 解析MTU大小字段
+     */
+    private function deserializeMtu(string $data, int $pos): int
+    {
+        $mtuResult = unpack('N', substr($data, $pos, 4));
+        if (false === $mtuResult || !isset($mtuResult[1]) || !is_int($mtuResult[1])) {
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
+        }
+        $this->maxTransmissionUnitSize = $mtuResult[1];
+
+        return $pos + 4;
+    }
+
+    /**
+     * 解析流窗口大小字段
+     */
+    private function deserializeMaxFlowWinSize(string $data, int $pos): int
+    {
+        $maxFlowWinResult = unpack('N', substr($data, $pos, 4));
+        if (false === $maxFlowWinResult || !isset($maxFlowWinResult[1]) || !is_int($maxFlowWinResult[1])) {
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
+        }
+        $this->maxFlowWinSize = $maxFlowWinResult[1];
+
+        return $pos + 4;
+    }
+
+    /**
+     * 解析握手类型字段
+     */
+    private function deserializeHandshakeType(string $data, int $pos): int
+    {
+        $handshakeTypeResult = unpack('N', substr($data, $pos, 4));
+        if (false === $handshakeTypeResult || !isset($handshakeTypeResult[1]) || !is_int($handshakeTypeResult[1])) {
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
+        }
+        $this->handshakeType = $handshakeTypeResult[1];
+
+        return $pos + 4;
+    }
+
+    /**
+     * 解析SRT Socket ID字段
+     */
+    private function deserializeSrtSocketId(string $data, int $pos): int
+    {
+        $srtSocketIdResult = unpack('N', substr($data, $pos, 4));
+        if (false === $srtSocketIdResult || !isset($srtSocketIdResult[1]) || !is_int($srtSocketIdResult[1])) {
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
+        }
+        $this->srtSocketId = $srtSocketIdResult[1];
+
+        return $pos + 4;
+    }
+
+    /**
+     * 解析对端IP地址字段
+     */
+    private function deserializePeerIpAddress(string $data, int $pos): int
+    {
+        $ipIntResult = unpack('N', substr($data, $pos, 4));
+        if (false === $ipIntResult || !isset($ipIntResult[1]) || !is_int($ipIntResult[1])) {
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
+        }
+        $ipInt = $ipIntResult[1];
+        $longToIpResult = long2ip($ipInt);
+        $this->peerIpAddress = false !== $longToIpResult ? $longToIpResult : '0.0.0.0';
+
+        return $pos + 4;
+    }
+
+    /**
+     * 解析扩展头部
+     * @return array{int, int}|null
+     */
+    private function parseExtensionHeader(string $data, int $pos): ?array
+    {
+        $typeResult = unpack('n', substr($data, $pos, 2));
+        if (false === $typeResult || !isset($typeResult[1]) || !is_int($typeResult[1])) {
+            return null;
+        }
+        $type = $typeResult[1];
+
+        $extLenResult = unpack('n', substr($data, $pos + 2, 2));
+        if (false === $extLenResult || !isset($extLenResult[1]) || !is_int($extLenResult[1])) {
+            return null;
+        }
+        $extLen = $extLenResult[1];
+
+        return [$type, $extLen];
+    }
+
+    /**
+     * 解析扩展值
+     */
+    private function parseExtensionValue(string $data, int $pos, int $extLen): mixed
+    {
+        if (4 === $extLen) {
+            $intValueResult = unpack('N', substr($data, $pos, 4));
+            if (false !== $intValueResult && isset($intValueResult[1])) {
+                $intValue = $intValueResult[1];
+                assert(is_int($intValue));
+
+                return $intValue;
+            }
+        } else {
+            return substr($data, $pos, $extLen);
+        }
+
+        return null;
+    }
+
+    /**
+     * 计算对齐填充字节数
+     */
+    private function calculatePadding(int $length): int
+    {
+        return (4 - ($length % 4)) % 4;
     }
 }

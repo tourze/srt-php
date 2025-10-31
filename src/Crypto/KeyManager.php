@@ -19,19 +19,22 @@ class KeyManager
      * 默认盐长度
      */
     private const DEFAULT_SALT_LENGTH = 16;
-    
+
     /**
      * 密钥存储
+     * @var array<string, string>
      */
     private array $keyStore = [];
-    
+
     /**
      * 盐存储
+     * @var array<string, string>
      */
     private array $saltStore = [];
-    
+
     /**
      * 密钥生成统计
+     * @var array<string, int>
      */
     private array $stats = [
         'keys_generated' => 0,
@@ -44,9 +47,9 @@ class KeyManager
      */
     public function generateSalt(int $length = self::DEFAULT_SALT_LENGTH): string
     {
-        $salt = random_bytes($length);
-        $this->stats['salt_generated']++;
-        
+        $salt = random_bytes(max(1, $length));
+        ++$this->stats['salt_generated'];
+
         return $salt;
     }
 
@@ -68,11 +71,12 @@ class KeyManager
 
     /**
      * 生成密钥对 (用于非对称加密)
+     * @return array<string, string>
      */
     public function generateKeyPair(): array
     {
         $keyPair = \sodium_crypto_box_keypair();
-        
+
         return [
             'public_key' => \sodium_crypto_box_publickey($keyPair),
             'private_key' => \sodium_crypto_box_secretkey($keyPair),
@@ -88,13 +92,14 @@ class KeyManager
         foreach ($this->keyStore as $key) {
             \sodium_memzero($key);
         }
-        
+
         $this->keyStore = [];
         $this->saltStore = [];
     }
 
     /**
      * 获取统计信息
+     * @return array<string, int>
      */
     public function getStats(): array
     {

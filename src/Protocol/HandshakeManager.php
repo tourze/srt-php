@@ -11,7 +11,7 @@ use Tourze\SRT\Exception\HandshakeException;
  *
  * 负责处理 SRT 连接的握手流程，包括：
  * - Caller-Listener 握手
- * - Rendezvous 握手  
+ * - Rendezvous 握手
  * - 加密协商
  * - 能力交换
  *
@@ -42,16 +42,23 @@ class HandshakeManager
     public const HS_EXT_SRT_ENCRYPTION = 5;
 
     private int $state = self::STATE_INIT;
-    private int $type;
+
     private string $streamId = '';
+
+    /**
+     * @var array<int, mixed>
+     */
     private array $extensions = [];
+
     private ?string $passphrase = null;
+
     private bool $encryptionEnabled = false;
+
     private int $latencyMs = 120; // 默认延迟 120ms
 
-    public function __construct(int $type = self::TYPE_CALLER_LISTENER)
-    {
-        $this->type = $type;
+    public function __construct(
+        private readonly int $type = self::TYPE_CALLER_LISTENER,
+    ) {
     }
 
     /**
@@ -71,6 +78,7 @@ class HandshakeManager
         $packet->setPeerIpAddress('0.0.0.0'); // 由对端填充
 
         $this->state = self::STATE_INDUCTION;
+
         return $packet;
     }
 
@@ -79,7 +87,7 @@ class HandshakeManager
      */
     public function createCallerConclusion(int $socketId, HandshakePacket $inductionResponse): HandshakePacket
     {
-        if ($this->state !== self::STATE_INDUCTION) {
+        if (self::STATE_INDUCTION !== $this->state) {
             throw new HandshakeException('Invalid state for Conclusion phase');
         }
 
@@ -98,6 +106,7 @@ class HandshakeManager
         $this->addSrtExtensions($packet);
 
         $this->state = self::STATE_CONCLUSION;
+
         return $packet;
     }
 
@@ -108,18 +117,19 @@ class HandshakeManager
     {
         $version = $packet->getVersion();
         if ($version < self::MIN_VERSION) {
-            throw new HandshakeException("Unsupported SRT version: " . dechex($version));
+            throw new HandshakeException('Unsupported SRT version: ' . dechex($version));
         }
 
         $hsType = $packet->getHandshakeType();
 
-        if ($hsType === 1) { // Induction
+        if (1 === $hsType) { // Induction
             return $this->createListenerInductionResponse($packet);
-        } elseif ($hsType === -1) { // Conclusion
+        }
+        if (-1 === $hsType) { // Conclusion
             return $this->createListenerConclusionResponse($packet);
         }
 
-        throw new HandshakeException("Invalid handshake type: $hsType");
+        throw new HandshakeException("Invalid handshake type: {$hsType}");
     }
 
     /**
@@ -136,9 +146,10 @@ class HandshakeManager
         $response->setMaxFlowWinSize(8192);
         $response->setHandshakeType(0); // Response
         $response->setSrtSocketId(random_int(1, 0x7FFFFFFF));
-        $response->setPeerIpAddress((string)$request->getSrtSocketId());
+        $response->setPeerIpAddress((string) $request->getSrtSocketId());
 
         $this->state = self::STATE_INDUCTION;
+
         return $response;
     }
 
@@ -158,13 +169,14 @@ class HandshakeManager
         $response->setMaxTransmissionUnitSize(1500);
         $response->setMaxFlowWinSize(8192);
         $response->setHandshakeType(0); // Response
-        $response->setSrtSocketId((int)$request->getPeerIpAddress());
-        $response->setPeerIpAddress((string)$request->getSrtSocketId());
+        $response->setSrtSocketId((int) $request->getPeerIpAddress());
+        $response->setPeerIpAddress((string) $request->getSrtSocketId());
 
         // 添加 SRT 扩展
         $this->addSrtExtensions($response);
 
         $this->state = self::STATE_DONE;
+
         return $response;
     }
 
@@ -192,7 +204,7 @@ class HandshakeManager
         $extensions[self::HS_EXT_SRT_PEER_LATENCY] = $this->latencyMs * 1000;
 
         // 加密配置
-        if ($this->encryptionEnabled && $this->passphrase !== null) {
+        if ($this->encryptionEnabled && null !== $this->passphrase) {
             $extensions[self::HS_EXT_SRT_ENCRYPTION] = $this->generateEncryptionData();
         }
 
@@ -213,23 +225,27 @@ class HandshakeManager
         if (isset($extensions[self::HS_EXT_SRT_VERSION])) {
             $peerVersion = $extensions[self::HS_EXT_SRT_VERSION];
             if ($peerVersion < self::MIN_VERSION) {
-                throw new HandshakeException("Peer SRT version too old: " . dechex($peerVersion));
+                assert(is_int($peerVersion));
+                throw new HandshakeException('Peer SRT version too old: ' . dechex($peerVersion));
             }
         }
 
         // 验证加密要求
         if (isset($extensions[self::HS_EXT_SRT_FLAGS])) {
             $peerFlags = $extensions[self::HS_EXT_SRT_FLAGS];
+            assert(is_int($peerFlags));
             $peerEncryption = ($peerFlags & 0x01) !== 0;
 
             if ($this->encryptionEnabled !== $peerEncryption) {
-                throw new HandshakeException("Encryption requirement mismatch");
+                throw new HandshakeException('Encryption requirement mismatch');
             }
         }
 
         // 协商延迟参数
         if (isset($extensions[self::HS_EXT_SRT_PEER_LATENCY])) {
-            $peerLatency = $extensions[self::HS_EXT_SRT_PEER_LATENCY] / 1000; // 转换为毫秒
+            $peerLatencyValue = $extensions[self::HS_EXT_SRT_PEER_LATENCY];
+            assert(is_int($peerLatencyValue));
+            $peerLatency = $peerLatencyValue / 1000; // 转换为毫秒
             $this->latencyMs = max($this->latencyMs, $peerLatency);
         }
     }
@@ -239,8 +255,8 @@ class HandshakeManager
      */
     private function generateEncryptionData(): string
     {
-        if ($this->passphrase === null) {
-            throw new HandshakeException("Passphrase required for encryption");
+        if (null === $this->passphrase) {
+            throw new HandshakeException('Passphrase required for encryption');
         }
 
         // 生成密钥盐值
@@ -258,7 +274,7 @@ class HandshakeManager
     public function setStreamId(string $streamId): void
     {
         if (strlen($streamId) > 512) {
-            throw new HandshakeException("Stream ID too long (max 512 characters)");
+            throw new HandshakeException('Stream ID too long (max 512 characters)');
         }
         $this->streamId = $streamId;
     }
@@ -281,6 +297,7 @@ class HandshakeManager
 
     /**
      * 获取扩展字段
+     * @return array<int, mixed>
      */
     public function getExtensions(): array
     {
@@ -289,6 +306,7 @@ class HandshakeManager
 
     /**
      * 设置扩展字段
+     * @param array<int, mixed> $extensions
      */
     public function setExtensions(array $extensions): void
     {
@@ -301,7 +319,7 @@ class HandshakeManager
     public function enableEncryption(string $passphrase): void
     {
         if (strlen($passphrase) < 10 || strlen($passphrase) > 79) {
-            throw new HandshakeException("Passphrase length must be 10-79 characters");
+            throw new HandshakeException('Passphrase length must be 10-79 characters');
         }
         $this->passphrase = $passphrase;
         $this->encryptionEnabled = true;
@@ -313,7 +331,7 @@ class HandshakeManager
     public function setLatency(int $latencyMs): void
     {
         if ($latencyMs < 20 || $latencyMs > 8000) {
-            throw new HandshakeException("Latency must be between 20-8000ms");
+            throw new HandshakeException('Latency must be between 20-8000ms');
         }
         $this->latencyMs = $latencyMs;
     }
@@ -331,7 +349,7 @@ class HandshakeManager
      */
     public function isCompleted(): bool
     {
-        return $this->state === self::STATE_DONE;
+        return self::STATE_DONE === $this->state;
     }
 
     /**
@@ -339,6 +357,6 @@ class HandshakeManager
      */
     public function isFailed(): bool
     {
-        return $this->state === self::STATE_ERROR;
+        return self::STATE_ERROR === $this->state;
     }
 }

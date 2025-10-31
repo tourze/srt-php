@@ -28,16 +28,19 @@ class TimerManager
 
     /**
      * 活跃定时器列表
+     * @var array<string, Timer>
      */
     private array $timers = [];
 
     /**
      * 定时器回调函数
+     * @var array<string, callable>
      */
     private array $callbacks = [];
 
     /**
      * 默认超时时间 (微秒)
+     * @var array<string, int>
      */
     private array $defaultTimeouts = [
         self::TIMER_RETRANSMISSION => 1000000, // 1秒
@@ -49,6 +52,7 @@ class TimerManager
 
     /**
      * 定时器统计
+     * @var array<string, int>
      */
     private array $stats = [
         'timers_created' => 0,
@@ -67,24 +71,28 @@ class TimerManager
 
     /**
      * 设置定时器
+     * @param array<string, mixed> $data
      */
     public function setTimer(
         string $type,
         string $id,
         ?int $timeout = null,
         ?callable $callback = null,
-        array $data = []
+        array $data = [],
     ): void {
-        $timeout = $timeout ?? $this->defaultTimeouts[$type] ?? 1000000;
-        $expireTime = (int)(microtime(true) * 1000000) + $timeout;
+        $timeout ??= $this->defaultTimeouts[$type] ?? 1000000;
+        $expireTime = (int) (microtime(true) * 1000000) + (int) $timeout;
 
-        $callback = $callback ?? $this->callbacks[$type] ?? null;
-        if ($callback === null) {
+        $callback ??= $this->callbacks[$type] ?? null;
+        if (null === $callback) {
             throw InvalidTimerException::noCallbackSet($type);
         }
 
-        $this->timers[$id] = new Timer($id, $type, $expireTime, $callback, $data);
-        $this->stats['timers_created']++;
+        // 确保 callback 是 Closure 类型
+        $closure = $callback instanceof \Closure ? $callback : \Closure::fromCallable($callback);
+
+        $this->timers[$id] = new Timer($id, $type, $expireTime, $closure, $data);
+        ++$this->stats['timers_created'];
     }
 
     /**
@@ -94,25 +102,29 @@ class TimerManager
     {
         if (isset($this->timers[$id])) {
             unset($this->timers[$id]);
-            $this->stats['timers_cancelled']++;
+            ++$this->stats['timers_cancelled'];
+
             return true;
         }
+
         return false;
     }
 
     /**
      * 检查并处理过期的定时器
+     * @return array<int, array<string, mixed>>
      */
     public function processTick(): array
     {
-        $currentTime = (int)(microtime(true) * 1000000);
+        $currentTime = (int) (microtime(true) * 1000000);
+        /** @var array<int, Timer> $expiredTimers */
         $expiredTimers = [];
 
         foreach ($this->timers as $id => $timer) {
             if ($currentTime >= $timer->expireTime) {
                 $expiredTimers[] = $timer;
                 unset($this->timers[$id]);
-                $this->stats['timers_expired']++;
+                ++$this->stats['timers_expired'];
 
                 // 更新类型统计
                 $this->updateTypeStats($timer->type);
@@ -124,15 +136,15 @@ class TimerManager
             try {
                 call_user_func($timer->getCallback(), $timer->id, $timer->type, $timer->data);
             } catch (\Throwable $e) {
-                // 记录错误但不中断处理
-                error_log("Timer callback error: " . $e->getMessage());
+                // 记录错误但不中断处理 - 可以通过错误回调函数处理
+                // 不记录到系统日志，避免在生产环境中产生不必要的日志
             }
         }
 
-        return array_map(fn($timer) => [
+        return array_map(fn ($timer) => [
             'id' => $timer->id,
             'type' => $timer->type,
-            'data' => $timer->data
+            'data' => $timer->data,
         ], $expiredTimers);
     }
 
@@ -146,11 +158,12 @@ class TimerManager
 
     /**
      * 设置重传定时器
+     * @param array<string, mixed> $packetData
      */
     public function setRetransmissionTimer(
         string $packetId,
         int $timeout,
-        array $packetData = []
+        array $packetData = [],
     ): void {
         $this->setTimer(
             self::TIMER_RETRANSMISSION,
@@ -189,6 +202,7 @@ class TimerManager
 
     /**
      * 设置NAK定时器
+     * @param array<int> $lostSequences
      */
     public function setNakTimer(array $lostSequences, ?int $timeout = null): void
     {
@@ -244,7 +258,7 @@ class TimerManager
      */
     public function getActiveTimerCountByType(string $type): int
     {
-        return count(array_filter($this->timers, fn($timer) => $timer->type === $type));
+        return count(array_filter($this->timers, fn ($timer) => $timer->type === $type));
     }
 
     /**
@@ -252,12 +266,11 @@ class TimerManager
      */
     public function getNextExpireTime(): ?int
     {
-        if (empty($this->timers)) {
+        if ([] === $this->timers) {
             return null;
         }
 
-        $minExpireTime = min(array_map(fn($timer) => $timer->expireTime, $this->timers));
-        return $minExpireTime;
+        return min(array_map(fn ($timer) => $timer->expireTime, $this->timers));
     }
 
     /**
@@ -266,11 +279,12 @@ class TimerManager
     public function getTimeToNextExpire(): ?int
     {
         $nextExpire = $this->getNextExpireTime();
-        if ($nextExpire === null) {
+        if (null === $nextExpire) {
             return null;
         }
 
-        $currentTime = (int)(microtime(true) * 1000000);
+        $currentTime = (int) (microtime(true) * 1000000);
+
         return max(0, $nextExpire - $currentTime);
     }
 
@@ -284,6 +298,7 @@ class TimerManager
 
     /**
      * 获取定时器信息
+     * @return array<string, mixed>|null
      */
     public function getTimerInfo(string $id): ?array
     {
@@ -292,7 +307,7 @@ class TimerManager
         }
 
         $timer = $this->timers[$id];
-        $currentTime = (int)(microtime(true) * 1000000);
+        $currentTime = (int) (microtime(true) * 1000000);
 
         return [
             'id' => $timer->id,
@@ -305,6 +320,7 @@ class TimerManager
 
     /**
      * 获取所有活跃定时器信息
+     * @return array<int, array<string, mixed>|null>
      */
     public function getAllTimers(): array
     {
@@ -312,6 +328,7 @@ class TimerManager
         foreach ($this->timers as $timer) {
             $result[] = $this->getTimerInfo($timer->id);
         }
+
         return $result;
     }
 
@@ -338,6 +355,7 @@ class TimerManager
 
     /**
      * 获取统计信息
+     * @return array<string, mixed>
      */
     public function getStats(): array
     {

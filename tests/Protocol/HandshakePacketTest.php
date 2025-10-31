@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace Tourze\SRT\Tests\Protocol;
 
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Tourze\SRT\Protocol\HandshakePacket;
 use Tourze\SRT\Exception\InvalidPacketException;
+use Tourze\SRT\Protocol\HandshakePacket;
 
-class HandshakePacketTest extends TestCase
+/**
+ * @internal
+ */
+#[CoversClass(HandshakePacket::class)]
+final class HandshakePacketTest extends TestCase
 {
     public function testInitialState(): void
     {
@@ -38,10 +43,10 @@ class HandshakePacketTest extends TestCase
         $original->setVersion(4);
         $original->setInitialSequenceNumber(12345);
         $original->setSrtSocketId(67890);
-        
+
         $serialized = $original->serialize();
         $deserialized = HandshakePacket::deserialize($serialized);
-        
+
         $this->assertEquals(4, $deserialized->getVersion());
         $this->assertEquals(12345, $deserialized->getInitialSequenceNumber());
         $this->assertEquals(67890, $deserialized->getSrtSocketId());
@@ -52,4 +57,4 @@ class HandshakePacketTest extends TestCase
         $this->expectException(InvalidPacketException::class);
         HandshakePacket::deserialize('short');
     }
-} 
+}

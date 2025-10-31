@@ -6,7 +6,7 @@ namespace Tourze\SRT\Engine;
 
 use Tourze\SRT\Protocol\ControlPacket;
 use Tourze\SRT\Protocol\DataPacket;
-use Tourze\SRT\Transport\UdpTransport;
+use Tourze\SRT\Transport\TransportInterface;
 
 /**
  * SRT 接收引擎
@@ -23,29 +23,47 @@ use Tourze\SRT\Transport\UdpTransport;
 class ReceiveEngine
 {
     private int $expectedSequenceNumber = 1;
+
     private int $sourceSocketId = 0;
+
     private int $receiveWindowSize = 8192; // 接收窗口大小
+
     private int $ackFrequency = 10; // 每接收多少包发送一次 ACK
 
     // 接收缓冲区管理
+    /** @var array<int, DataPacket> */
     private array $receiveBuffer = []; // 按序列号索引的包缓冲区
+
+    /** @var array<int, array{packets: array<DataPacket>, totalPackets: int, receivedPackets: int}> */
     private array $messageBuffer = []; // 按消息号索引的消息缓冲区
+
+    /** @var array<int, string> */
     private array $completedMessages = []; // 完整消息队列
 
     // 丢包检测
+    /** @var array<int, bool> */
     private array $receivedSequences = []; // 已接收的序列号
+
     private int $lastAckSequence = 0; // 最后确认的序列号
+
     private int $packetsReceived = 0; // 接收到的包计数
 
     // 统计信息
     private int $totalReceived = 0;
+
     private int $totalBytes = 0;
+
     private int $duplicatePackets = 0;
+
     private int $outOfOrderPackets = 0;
+
     private int $acksSent = 0;
+
     private int $naksSent = 0;
 
-    public function __construct(private readonly UdpTransport $transport) {}
+    public function __construct(private readonly TransportInterface $transport)
+    {
+    }
 
     /**
      * 处理接收到的数据包
@@ -56,19 +74,20 @@ class ReceiveEngine
 
         // 检查是否重复包
         if (isset($this->receivedSequences[$sequenceNumber])) {
-            $this->duplicatePackets++;
+            ++$this->duplicatePackets;
+
             return;
         }
 
         // 记录接收到的序列号
         $this->receivedSequences[$sequenceNumber] = true;
-        $this->totalReceived++;
+        ++$this->totalReceived;
         $this->totalBytes += $packet->getPayloadLength();
 
         // 检查是否乱序
         if ($sequenceNumber < $this->expectedSequenceNumber) {
             // 这是一个延迟到达的包，已经被认为丢失过
-            $this->outOfOrderPackets++;
+            ++$this->outOfOrderPackets;
         }
 
         // 将包添加到接收缓冲区
@@ -81,8 +100,8 @@ class ReceiveEngine
         $this->detectLostPackets();
 
         // 定期发送 ACK
-        $this->packetsReceived++;
-        if ($this->packetsReceived % $this->ackFrequency === 0) {
+        ++$this->packetsReceived;
+        if (0 === $this->packetsReceived % $this->ackFrequency) {
             $this->sendAck();
         }
     }
@@ -92,7 +111,7 @@ class ReceiveEngine
      */
     public function getNextMessage(): ?string
     {
-        if (empty($this->completedMessages)) {
+        if ([] === $this->completedMessages) {
             return null;
         }
 
@@ -104,7 +123,7 @@ class ReceiveEngine
      */
     public function hasMessage(): bool
     {
-        return !empty($this->completedMessages);
+        return [] !== $this->completedMessages;
     }
 
     /**
@@ -117,7 +136,7 @@ class ReceiveEngine
             unset($this->receiveBuffer[$this->expectedSequenceNumber]);
 
             $this->processPacket($packet);
-            $this->expectedSequenceNumber++;
+            ++$this->expectedSequenceNumber;
         }
     }
 
@@ -137,9 +156,12 @@ class ReceiveEngine
             ];
         }
 
-        $messageInfo = &$this->messageBuffer[$messageNumber];
-        $messageInfo['packets'][] = $packet;
-        $messageInfo['receivedPackets']++;
+        if (!is_array($this->messageBuffer[$messageNumber]['packets'])) {
+            /** @phpstan-ignore-next-line */
+            $this->messageBuffer[$messageNumber]['packets'] = [];
+        }
+        $this->messageBuffer[$messageNumber]['packets'][] = $packet;
+        ++$this->messageBuffer[$messageNumber]['receivedPackets'];
 
         // 检查是否收到完整消息
         if ($packet->isSinglePacket()) {
@@ -148,7 +170,7 @@ class ReceiveEngine
             unset($this->messageBuffer[$messageNumber]);
         } elseif ($packet->isFirstPacket()) {
             // 首包，标记消息开始
-            $messageInfo['totalPackets'] = $this->estimateMessagePackets($packet);
+            $this->messageBuffer[$messageNumber]['totalPackets'] = $this->estimateMessagePackets($packet);
         } elseif ($packet->isLastPacket()) {
             // 末包，检查消息是否完整
             $this->checkMessageComplete($messageNumber);
@@ -165,12 +187,17 @@ class ReceiveEngine
         }
 
         $messageInfo = $this->messageBuffer[$messageNumber];
+        /** @var array<int, DataPacket> $packets */
         $packets = $messageInfo['packets'];
 
         // 按序列号排序包
-        usort($packets, fn($a, $b) => $a->getSequenceNumber() <=> $b->getSequenceNumber());
+        usort($packets, fn (DataPacket $a, DataPacket $b): int => $a->getSequenceNumber() <=> $b->getSequenceNumber());
 
         // 检查包的连续性
+        if ([] === $packets) {
+            return;
+        }
+
         $expectedSequence = $packets[0]->getSequenceNumber();
         $isComplete = true;
 
@@ -179,10 +206,11 @@ class ReceiveEngine
                 $isComplete = false;
                 break;
             }
-            $expectedSequence++;
+            ++$expectedSequence;
         }
 
-        if ($isComplete && $packets[count($packets) - 1]->isLastPacket()) {
+        $lastPacket = $packets[count($packets) - 1];
+        if ($isComplete && $lastPacket->isLastPacket()) {
             // 消息完整，重组数据
             $messageData = '';
             foreach ($packets as $packet) {
@@ -212,7 +240,7 @@ class ReceiveEngine
         $lostSequences = [];
 
         // 检查期望序列号之前的缺失包
-        for ($seq = $this->lastAckSequence + 1; $seq < $this->expectedSequenceNumber; $seq++) {
+        for ($seq = $this->lastAckSequence + 1; $seq < $this->expectedSequenceNumber; ++$seq) {
             if (!isset($this->receivedSequences[$seq])) {
                 $lostSequences[] = $seq;
             }
@@ -223,14 +251,14 @@ class ReceiveEngine
         $windowEndSeq = $this->expectedSequenceNumber + $this->receiveWindowSize;
         $checkUntil = min($maxSeq, $windowEndSeq);
 
-        for ($seq = $this->expectedSequenceNumber + 1; $seq <= $checkUntil; $seq++) {
+        for ($seq = $this->expectedSequenceNumber + 1; $seq <= $checkUntil; ++$seq) {
             if (!isset($this->receivedSequences[$seq]) && !isset($this->receiveBuffer[$seq])) {
                 $lostSequences[] = $seq;
             }
         }
 
         // 发送 NAK
-        if (!empty($lostSequences)) {
+        if ([] !== $lostSequences) {
             $this->sendNak($lostSequences);
         }
     }
@@ -248,12 +276,13 @@ class ReceiveEngine
             $this->transport->send($ackPacket->serialize());
 
             $this->lastAckSequence = $ackSequence;
-            $this->acksSent++;
+            ++$this->acksSent;
         }
     }
 
     /**
      * 发送 NAK
+     * @param array<int, int> $lostSequences
      */
     private function sendNak(array $lostSequences): void
     {
@@ -264,7 +293,7 @@ class ReceiveEngine
         foreach ($chunks as $chunk) {
             $nakPacket = ControlPacket::createNak($chunk, $this->sourceSocketId);
             $this->transport->send($nakPacket->serialize());
-            $this->naksSent++;
+            ++$this->naksSent;
         }
     }
 
@@ -302,6 +331,7 @@ class ReceiveEngine
 
     /**
      * 获取统计信息
+     * @return array<string, int>
      */
     public function getStatistics(): array
     {

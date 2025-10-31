@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace Tourze\SRT\Exception;
 
-use RuntimeException;
-
 /**
  * 加密相关异常
  *
  * 用于处理 SRT 协议加密过程中的各种错误
  */
-class CryptoException extends RuntimeException
+class CryptoException extends \RuntimeException
 {
     /**
      * 加密失败

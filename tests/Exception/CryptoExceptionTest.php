@@ -2,12 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Tourze\SRT\Tests\Unit\Exception;
+namespace Tourze\SRT\Tests\Exception;
 
-use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\CoversClass;
+use Tourze\PHPUnitBase\AbstractExceptionTestCase;
 use Tourze\SRT\Exception\CryptoException;
 
-class CryptoExceptionTest extends TestCase
+/**
+ * @internal
+ */
+#[CoversClass(CryptoException::class)]
+final class CryptoExceptionTest extends AbstractExceptionTestCase
 {
     public function testCanBeCreated(): void
     {

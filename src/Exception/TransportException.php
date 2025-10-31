@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace Tourze\SRT\Exception;
 
-use RuntimeException;
-
 /**
  * 传输层异常
  *
  * 当网络传输操作失败时抛出此异常
  */
-class TransportException extends RuntimeException
+class TransportException extends \RuntimeException
 {
     public static function bindFailed(string $host, int $port, string $error): self
     {

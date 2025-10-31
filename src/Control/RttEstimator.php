@@ -19,69 +19,56 @@ class RttEstimator
      * 平滑 RTT (微秒)
      */
     private float $smoothedRtt = 0.0;
-    
+
     /**
      * RTT 变化量 (微秒)
      */
     private float $rttVariation = 0.0;
-    
+
     /**
      * 当前 RTT (微秒)
      */
     private int $currentRtt = 0;
-    
+
     /**
      * 最小 RTT (微秒)
      */
     private int $minRtt = 0;
-    
+
     /**
      * 最大 RTT (微秒)
      */
     private int $maxRtt = 0;
-    
+
     /**
      * RTT 历史记录
+     * @var array<array{rtt: int, timestamp: int}>
      */
     private array $rttHistory = [];
-    
-    /**
-     * 历史记录最大长度
-     */
-    private int $maxHistorySize = 100;
-    
-    /**
-     * 平滑因子 alpha (RFC 6298)
-     */
-    private float $alpha = 0.125;
-    
-    /**
-     * 变化因子 beta (RFC 6298)
-     */
-    private float $beta = 0.25;
-    
+
     /**
      * RTO 乘数 K (RFC 6298)
      */
     private int $k = 4;
-    
+
     /**
      * 最小 RTO (微秒)
      */
     private int $minRto = 1000; // 1ms
-    
+
     /**
      * 最大 RTO (微秒)
      */
     private int $maxRto = 60000000; // 60s
-    
+
     /**
      * 网络抖动阈值 (微秒)
      */
     private int $jitterThreshold = 5000; // 5ms
-    
+
     /**
      * 统计信息
+     * @var array{total_measurements: int, rto_timeouts: int, jitter_events: int, network_condition_changes: int}
      */
     private array $stats = [
         'total_measurements' => 0,
@@ -91,13 +78,10 @@ class RttEstimator
     ];
 
     public function __construct(
-        float $alpha = 0.125,
-        float $beta = 0.25,
-        int $maxHistorySize = 100
+        private readonly float $alpha = 0.125,
+        private readonly float $beta = 0.25,
+        private readonly int $maxHistorySize = 100,
     ) {
-        $this->alpha = $alpha;
-        $this->beta = $beta;
-        $this->maxHistorySize = $maxHistorySize;
     }
 
     /**
@@ -106,28 +90,28 @@ class RttEstimator
     public function updateRtt(int $rtt): void
     {
         $this->currentRtt = $rtt;
-        $this->stats['total_measurements']++;
-        
+        ++$this->stats['total_measurements'];
+
         // 初始化时的特殊处理
-        if ($this->smoothedRtt == 0.0) {
+        if (0.0 === $this->smoothedRtt) {
             $this->smoothedRtt = $rtt;
             $this->rttVariation = $rtt / 2.0;
             $this->minRtt = $rtt;
             $this->maxRtt = $rtt;
         } else {
             // RFC 6298 算法
-            $this->rttVariation = (1 - $this->beta) * $this->rttVariation + 
+            $this->rttVariation = (1 - $this->beta) * $this->rttVariation +
                                   $this->beta * abs($this->smoothedRtt - $rtt);
             $this->smoothedRtt = (1 - $this->alpha) * $this->smoothedRtt + $this->alpha * $rtt;
-            
+
             // 更新最小和最大 RTT
             $this->minRtt = min($this->minRtt, $rtt);
             $this->maxRtt = max($this->maxRtt, $rtt);
         }
-        
+
         // 添加到历史记录
         $this->addToHistory($rtt);
-        
+
         // 检测网络抖动
         $this->detectJitter($rtt);
     }
@@ -137,12 +121,12 @@ class RttEstimator
      */
     public function calculateRto(): int
     {
-        if ($this->smoothedRtt == 0.0) {
+        if (0.0 === $this->smoothedRtt) {
             return $this->minRto;
         }
-        
-        $rto = (int)($this->smoothedRtt + max(1000, $this->k * $this->rttVariation));
-        
+
+        $rto = (int) ($this->smoothedRtt + max(1000, $this->k * $this->rttVariation));
+
         return max($this->minRto, min($this->maxRto, $rto));
     }
 
@@ -155,7 +139,7 @@ class RttEstimator
             'rtt' => $rtt,
             'timestamp' => hrtime(true),
         ];
-        
+
         // 限制历史记录大小
         if (count($this->rttHistory) > $this->maxHistorySize) {
             array_shift($this->rttHistory);
@@ -170,12 +154,12 @@ class RttEstimator
         if (count($this->rttHistory) < 2) {
             return;
         }
-        
+
         $previousRtt = $this->rttHistory[count($this->rttHistory) - 2]['rtt'];
         $jitter = abs($rtt - $previousRtt);
-        
+
         if ($jitter > $this->jitterThreshold) {
-            $this->stats['jitter_events']++;
+            ++$this->stats['jitter_events'];
         }
     }
 
@@ -187,16 +171,16 @@ class RttEstimator
         if (count($this->rttHistory) < 2) {
             return 0.0;
         }
-        
+
         $jitterSum = 0;
         $count = 0;
-        
-        for ($i = 1; $i < count($this->rttHistory); $i++) {
+
+        for ($i = 1; $i < count($this->rttHistory); ++$i) {
             $jitter = abs($this->rttHistory[$i]['rtt'] - $this->rttHistory[$i - 1]['rtt']);
             $jitterSum += $jitter;
-            $count++;
+            ++$count;
         }
-        
+
         return $count > 0 ? $jitterSum / $count : 0.0;
     }
 
@@ -205,25 +189,70 @@ class RttEstimator
      */
     public function getNetworkCondition(): string
     {
-        if ($this->smoothedRtt == 0.0) {
+        if (0.0 === $this->smoothedRtt) {
             return 'unknown';
         }
-        
+
         $jitter = $this->getJitter();
         $rttVariability = $this->rttVariation / $this->smoothedRtt;
-        
-        // 网络条件评估标准
-        if ($this->smoothedRtt < 20000 && $jitter < 2000 && $rttVariability < 0.1) {
+
+        return $this->evaluateNetworkCondition($this->smoothedRtt, $jitter, $rttVariability);
+    }
+
+    /**
+     * 评估网络条件
+     */
+    private function evaluateNetworkCondition(float $rtt, float $jitter, float $variability): string
+    {
+        if ($this->isExcellentCondition($rtt, $jitter, $variability)) {
             return 'excellent';
-        } elseif ($this->smoothedRtt < 50000 && $jitter < 5000 && $rttVariability < 0.2) {
-            return 'good';
-        } elseif ($this->smoothedRtt < 100000 && $jitter < 10000 && $rttVariability < 0.3) {
-            return 'fair';
-        } elseif ($this->smoothedRtt < 200000 && $jitter < 20000 && $rttVariability < 0.5) {
-            return 'poor';
-        } else {
-            return 'terrible';
         }
+
+        if ($this->isGoodCondition($rtt, $jitter, $variability)) {
+            return 'good';
+        }
+
+        if ($this->isFairCondition($rtt, $jitter, $variability)) {
+            return 'fair';
+        }
+
+        if ($this->isPoorCondition($rtt, $jitter, $variability)) {
+            return 'poor';
+        }
+
+        return 'terrible';
+    }
+
+    /**
+     * 检查是否为优秀网络条件
+     */
+    private function isExcellentCondition(float $rtt, float $jitter, float $variability): bool
+    {
+        return $rtt < 20000 && $jitter < 2000 && $variability < 0.1;
+    }
+
+    /**
+     * 检查是否为良好网络条件
+     */
+    private function isGoodCondition(float $rtt, float $jitter, float $variability): bool
+    {
+        return $rtt < 50000 && $jitter < 5000 && $variability < 0.2;
+    }
+
+    /**
+     * 检查是否为一般网络条件
+     */
+    private function isFairCondition(float $rtt, float $jitter, float $variability): bool
+    {
+        return $rtt < 100000 && $jitter < 10000 && $variability < 0.3;
+    }
+
+    /**
+     * 检查是否为较差网络条件
+     */
+    private function isPoorCondition(float $rtt, float $jitter, float $variability): bool
+    {
+        return $rtt < 200000 && $jitter < 20000 && $variability < 0.5;
     }
 
     /**
@@ -234,15 +263,15 @@ class RttEstimator
         if (count($this->rttHistory) < 10) {
             return 50; // 默认中等稳定性
         }
-        
+
         $jitter = $this->getJitter();
         $rttVariability = $this->rttVariation / $this->smoothedRtt;
-        
+
         // 基于抖动和变化率计算稳定性评分
         $jitterScore = max(0, 100 - ($jitter / 1000) * 10); // 每1ms抖动扣10分
         $variabilityScore = max(0, 100 - $rttVariability * 200); // 变化率越大扣分越多
-        
-        return (int)(($jitterScore + $variabilityScore) / 2);
+
+        return (int) (($jitterScore + $variabilityScore) / 2);
     }
 
     /**
@@ -250,13 +279,13 @@ class RttEstimator
      */
     public function getSuggestedWindowSize(int $bandwidth): int
     {
-        if ($this->smoothedRtt == 0.0) {
+        if (0.0 === $this->smoothedRtt) {
             return 8192; // 默认窗口大小
         }
-        
+
         // BDP (Bandwidth-Delay Product) 计算
         $bdp = ($bandwidth * $this->smoothedRtt) / 8000000; // 转换为包数 (假设1500字节/包)
-        
+
         // 考虑网络条件调整
         $condition = $this->getNetworkCondition();
         $multiplier = match ($condition) {
@@ -267,9 +296,9 @@ class RttEstimator
             'terrible' => 0.5,
             default => 1.0,
         };
-        
-        $suggestedSize = (int)($bdp * $multiplier);
-        
+
+        $suggestedSize = (int) ($bdp * $multiplier);
+
         return max(1, min(65536, $suggestedSize));
     }
 
@@ -328,6 +357,7 @@ class RttEstimator
 
     /**
      * 获取 RTT 历史记录
+     * @return array<array{rtt: int, timestamp: int}>
      */
     public function getRttHistory(): array
     {
@@ -353,6 +383,7 @@ class RttEstimator
 
     /**
      * 获取详细统计信息
+     * @return array<string, mixed>
      */
     public function getStats(): array
     {

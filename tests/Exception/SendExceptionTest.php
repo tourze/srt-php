@@ -2,12 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Tourze\SRT\Tests\Unit\Exception;
+namespace Tourze\SRT\Tests\Exception;
 
-use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\CoversClass;
+use Tourze\PHPUnitBase\AbstractExceptionTestCase;
 use Tourze\SRT\Exception\SendException;
 
-class SendExceptionTest extends TestCase
+/**
+ * @internal
+ */
+#[CoversClass(SendException::class)]
+final class SendExceptionTest extends AbstractExceptionTestCase
 {
     public function testCanBeCreated(): void
     {
@@ -20,7 +25,7 @@ class SendExceptionTest extends TestCase
     {
         $previous = new \Exception('Network error');
         $exception = new SendException('Failed to send data', 300, $previous);
-        
+
         $this->assertSame('Failed to send data', $exception->getMessage());
         $this->assertSame(300, $exception->getCode());
         $this->assertSame($previous, $exception->getPrevious());

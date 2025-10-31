@@ -4,17 +4,21 @@ declare(strict_types=1);
 
 namespace Tourze\SRT\Tests\Control;
 
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Tourze\SRT\Control\Timer;
 
 /**
  * 定时器测试
+ *
+ * @internal
  */
-class TimerTest extends TestCase
+#[CoversClass(Timer::class)]
+final class TimerTest extends TestCase
 {
     public function testTimerConstruction(): void
     {
-        $callback = fn() => 'test';
+        $callback = fn () => 'test';
         $timer = new Timer(
             'test-id',
             'test-type',
@@ -33,37 +37,38 @@ class TimerTest extends TestCase
     public function testTimerCallback(): void
     {
         $executed = false;
-        $callback = function() use (&$executed) {
+        $callback = function () use (&$executed) {
             $executed = true;
+
             return 'executed';
         };
 
         $timer = new Timer('test', 'test', 1000000, $callback);
-        
+
         $result = call_user_func($timer->getCallback());
-        
+
         $this->assertTrue($executed);
         $this->assertEquals('executed', $result);
     }
 
     public function testTimerWithEmptyData(): void
     {
-        $timer = new Timer('test', 'test', 1000000, fn() => null);
-        
+        $timer = new Timer('test', 'test', 1000000, fn () => null);
+
         $this->assertEmpty($timer->data);
     }
 
     public function testTimerWithCallbackParameters(): void
     {
         $receivedParams = [];
-        $callback = function($param1, $param2) use (&$receivedParams) {
+        $callback = function ($param1, $param2) use (&$receivedParams): void {
             $receivedParams = [$param1, $param2];
         };
 
         $timer = new Timer('test', 'test', 1000000, $callback);
-        
+
         call_user_func($timer->getCallback(), 'param1', 'param2');
-        
+
         $this->assertEquals(['param1', 'param2'], $receivedParams);
     }
-} 
+}

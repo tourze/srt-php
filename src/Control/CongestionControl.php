@@ -79,20 +79,23 @@ class CongestionControl
 
     /**
      * RTT测量历史
+     * @var array<int>
      */
     private array $rttHistory = [];
 
     /**
      * 丢包统计
+     * @var array{total_packets: int, lost_packets: int, last_loss_time: float}
      */
     private array $lossStats = [
         'total_packets' => 0,
         'lost_packets' => 0,
-        'last_loss_time' => 0,
+        'last_loss_time' => 0.0,
     ];
 
     /**
      * 拥塞控制统计
+     * @var array{rate_increases: int, rate_decreases: int, slow_start_exits: int, congestion_events: int}
      */
     private array $stats = [
         'rate_increases' => 0,
@@ -109,7 +112,7 @@ class CongestionControl
     public function __construct(
         int $initialRate = 1000000, // 1MB/s
         int $maxRate = 100000000,   // 100MB/s
-        int $minRate = 10000        // 10KB/s
+        int $minRate = 10000,        // 10KB/s
     ) {
         $this->sendingRate = $initialRate;
         $this->maxSendingRate = $maxRate;
@@ -152,7 +155,7 @@ class CongestionControl
      */
     public function onPacketSent(): void
     {
-        $this->lossStats['total_packets']++;
+        ++$this->lossStats['total_packets'];
     }
 
     /**
@@ -189,7 +192,7 @@ class CongestionControl
     private function updateLossRate(): void
     {
         if ($this->lossStats['total_packets'] > 0) {
-            $this->lossRate = $this->lossStats['lost_packets'] / $this->lossStats['total_packets'];
+            $this->lossRate = (float) $this->lossStats['lost_packets'] / (float) $this->lossStats['total_packets'];
         }
     }
 
@@ -206,7 +209,7 @@ class CongestionControl
      */
     private function onCongestionEvent(): void
     {
-        $this->stats['congestion_events']++;
+        ++$this->stats['congestion_events'];
 
         // 检查是否需要更严格的拥塞控制
         if ($this->isLossRateExceeded()) {
@@ -218,7 +221,7 @@ class CongestionControl
         if ($this->inSlowStart) {
             $this->inSlowStart = false;
             $this->slowStartThreshold = $this->congestionWindow / 2.0;
-            $this->stats['slow_start_exits']++;
+            ++$this->stats['slow_start_exits'];
         }
 
         // 乘性减少
@@ -238,7 +241,7 @@ class CongestionControl
         }
 
         $this->updateSendingRate();
-        $this->stats['rate_increases']++;
+        ++$this->stats['rate_increases'];
     }
 
     /**
@@ -250,7 +253,7 @@ class CongestionControl
         $increment = min($this->additiveIncrease, 1500) / $this->congestionWindow; // 限制最大增量为一个MTU
         $this->congestionWindow += $increment;
         $this->updateSendingRate();
-        $this->stats['rate_increases']++;
+        ++$this->stats['rate_increases'];
     }
 
     /**
@@ -261,7 +264,7 @@ class CongestionControl
         $this->congestionWindow *= $this->multiplicativeDecrease;
         $this->congestionWindow = max(1.0, $this->congestionWindow);
         $this->updateSendingRate();
-        $this->stats['rate_decreases']++;
+        ++$this->stats['rate_decreases'];
     }
 
     /**
@@ -273,7 +276,7 @@ class CongestionControl
         $rtt = max(1000, $this->smoothedRtt); // 最小1ms RTT
         $mss = 1500; // 最大段大小 (bytes)
 
-        $newRate = (int)(($this->congestionWindow * $mss * 1000000) / $rtt);
+        $newRate = (int) (($this->congestionWindow * $mss * 1000000) / $rtt);
         $this->sendingRate = max($this->minSendingRate, min($this->maxSendingRate, $newRate));
     }
 
@@ -340,7 +343,8 @@ class CongestionControl
     {
         // RFC 6298 RTO计算
         $rto = $this->smoothedRtt + max(1000, 4 * $this->rttVariation);
-        return (int)max(1000, min(60000000, $rto)); // 1ms - 60s
+
+        return (int) max(1000, min(60000000, $rto)); // 1ms - 60s
     }
 
     /**
@@ -350,17 +354,20 @@ class CongestionControl
     {
         if ($this->lossRate > 0.1) {
             return 'poor';
-        } elseif ($this->lossRate > 0.05) {
-            return 'fair';
-        } elseif ($this->lossRate > 0.01) {
-            return 'good';
-        } else {
-            return 'excellent';
         }
+        if ($this->lossRate > 0.05) {
+            return 'fair';
+        }
+        if ($this->lossRate > 0.01) {
+            return 'good';
+        }
+
+        return 'excellent';
     }
 
     /**
      * 获取统计信息
+     * @return array<string, mixed>
      */
     public function getStats(): array
     {
@@ -395,7 +402,7 @@ class CongestionControl
         $this->lossStats = [
             'total_packets' => 0,
             'lost_packets' => 0,
-            'last_loss_time' => 0,
+            'last_loss_time' => 0.0,
         ];
 
         $this->lossRate = 0.0;

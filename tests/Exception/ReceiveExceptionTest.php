@@ -2,12 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Tourze\SRT\Tests\Unit\Exception;
+namespace Tourze\SRT\Tests\Exception;
 
-use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\CoversClass;
+use Tourze\PHPUnitBase\AbstractExceptionTestCase;
 use Tourze\SRT\Exception\ReceiveException;
 
-class ReceiveExceptionTest extends TestCase
+/**
+ * @internal
+ */
+#[CoversClass(ReceiveException::class)]
+final class ReceiveExceptionTest extends AbstractExceptionTestCase
 {
     public function testCanBeCreated(): void
     {
@@ -20,7 +25,7 @@ class ReceiveExceptionTest extends TestCase
     {
         $previous = new \Exception('Socket error');
         $exception = new ReceiveException('Failed to receive data', 200, $previous);
-        
+
         $this->assertSame('Failed to receive data', $exception->getMessage());
         $this->assertSame(200, $exception->getCode());
         $this->assertSame($previous, $exception->getPrevious());

@@ -26,17 +26,13 @@ class EncryptionManager
 
     /**
      * 密钥长度映射
+     * @var array<string, int>
      */
     private const KEY_LENGTHS = [
         self::ALGO_AES_128 => 16,
         self::ALGO_AES_192 => 24,
         self::ALGO_AES_256 => 32,
     ];
-
-    /**
-     * 当前使用的加密算法
-     */
-    private string $algorithm;
 
     /**
      * 加密密钥
@@ -47,11 +43,6 @@ class EncryptionManager
      * 解密密钥 (可能与加密密钥不同)
      */
     private string $decryptionKey = '';
-
-    /**
-     * 密码短语
-     */
-    private string $passphrase;
 
     /**
      * 是否启用加密
@@ -75,6 +66,7 @@ class EncryptionManager
 
     /**
      * 加密统计信息
+     * @var array<string, int>
      */
     private array $stats = [
         'encrypted_packets' => 0,
@@ -85,19 +77,16 @@ class EncryptionManager
     ];
 
     public function __construct(
-        string $algorithm = self::ALGO_AES_256,
-        string $passphrase = ''
+        private readonly string $algorithm = self::ALGO_AES_256,
+        private readonly string $passphrase = '',
     ) {
-        if (!in_array($algorithm, [self::ALGO_AES_128, self::ALGO_AES_192, self::ALGO_AES_256])) {
+        if (!in_array($algorithm, [self::ALGO_AES_128, self::ALGO_AES_192, self::ALGO_AES_256], true)) {
             throw new CryptoException("不支持的加密算法: {$algorithm}");
         }
-
-        $this->algorithm = $algorithm;
-        $this->passphrase = $passphrase;
         $this->keyManager = new KeyManager();
 
-        if (!empty($passphrase)) {
-            $this->enableEncryption($passphrase);
+        if ('' !== $this->passphrase) {
+            $this->enableEncryption($this->passphrase);
         }
     }
 
@@ -106,11 +95,10 @@ class EncryptionManager
      */
     public function enableEncryption(string $passphrase): void
     {
-        $this->passphrase = $passphrase;
         $this->encryptionEnabled = true;
 
         // 生成初始密钥
-        $this->generateKeys();
+        $this->generateKeys($passphrase);
     }
 
     /**
@@ -147,17 +135,17 @@ class EncryptionManager
                 $iv
             );
 
-            if ($encrypted === false) {
-                $this->stats['encryption_errors']++;
+            if (false === $encrypted) {
+                ++$this->stats['encryption_errors'];
                 throw new CryptoException('数据包加密失败: ' . openssl_error_string());
             }
 
-            $this->stats['encrypted_packets']++;
-            $this->keyUsageCount++;
+            ++$this->stats['encrypted_packets'];
+            ++$this->keyUsageCount;
 
             return $encrypted;
         } catch (\Throwable $e) {
-            $this->stats['encryption_errors']++;
+            ++$this->stats['encryption_errors'];
             throw new CryptoException('加密过程中发生错误: ' . $e->getMessage(), 0, $e);
         }
     }
@@ -184,16 +172,16 @@ class EncryptionManager
                 $iv
             );
 
-            if ($decrypted === false) {
-                $this->stats['decryption_errors']++;
+            if (false === $decrypted) {
+                ++$this->stats['decryption_errors'];
                 throw new CryptoException('数据包解密失败: ' . openssl_error_string());
             }
 
-            $this->stats['decrypted_packets']++;
+            ++$this->stats['decrypted_packets'];
 
             return $decrypted;
         } catch (\Throwable $e) {
-            $this->stats['decryption_errors']++;
+            ++$this->stats['decryption_errors'];
             throw new CryptoException('解密过程中发生错误: ' . $e->getMessage(), 0, $e);
         }
     }
@@ -201,15 +189,16 @@ class EncryptionManager
     /**
      * 生成密钥对
      */
-    private function generateKeys(): void
+    private function generateKeys(?string $passphrase = null): void
     {
         $keyLength = self::KEY_LENGTHS[$this->algorithm];
+        $passphraseToUse = $passphrase ?? $this->passphrase;
 
         // 使用 PBKDF2 从密码短语生成密钥
         $salt = $this->keyManager->generateSalt();
         $this->encryptionKey = hash_pbkdf2(
             'sha256',
-            $this->passphrase,
+            $passphraseToUse,
             $salt,
             10000, // 迭代次数
             $keyLength,
@@ -228,10 +217,9 @@ class EncryptionManager
     private function generateIv(int $sequenceNumber): string
     {
         // 使用序列号作为 IV 的一部分，确保每个包的 IV 不同但可重现
-        $ivData = pack('N', $sequenceNumber) . str_repeat("\x00", 12);
+        return pack('N', $sequenceNumber) . str_repeat("\x00", 12);
 
         // CTR 模式需要16字节的 IV
-        return $ivData;
     }
 
     /**
@@ -251,7 +239,7 @@ class EncryptionManager
     {
         // 生成新的密钥
         $this->generateKeys();
-        $this->stats['key_refreshes']++;
+        ++$this->stats['key_refreshes'];
     }
 
     /**
@@ -259,12 +247,12 @@ class EncryptionManager
      */
     private function clearKeys(): void
     {
-        if ($this->encryptionKey !== '') {
+        if ('' !== $this->encryptionKey) {
             $encKey = $this->encryptionKey;
             sodium_memzero($encKey);
             $this->encryptionKey = '';
         }
-        if ($this->decryptionKey !== '') {
+        if ('' !== $this->decryptionKey) {
             $decKey = $this->decryptionKey;
             sodium_memzero($decKey);
             $this->decryptionKey = '';
@@ -305,6 +293,7 @@ class EncryptionManager
 
     /**
      * 获取加密统计信息
+     * @return array<string, mixed>
      */
     public function getStats(): array
     {
@@ -340,7 +329,7 @@ class EncryptionManager
             throw new CryptoException('OpenSSL 扩展未安装');
         }
 
-        if (!in_array($this->algorithm, openssl_get_cipher_methods())) {
+        if (!in_array($this->algorithm, openssl_get_cipher_methods(), true)) {
             throw new CryptoException("系统不支持加密算法: {$this->algorithm}");
         }
 

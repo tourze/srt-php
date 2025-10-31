@@ -7,7 +7,7 @@ namespace Tourze\SRT\Engine;
 use Tourze\SRT\Exception\SendException;
 use Tourze\SRT\Protocol\ControlPacket;
 use Tourze\SRT\Protocol\DataPacket;
-use Tourze\SRT\Transport\UdpTransport;
+use Tourze\SRT\Transport\TransportInterface;
 
 /**
  * SRT 发送引擎
@@ -22,29 +22,41 @@ use Tourze\SRT\Transport\UdpTransport;
  */
 class SendEngine
 {
-    private UdpTransport $transport;
     private int $nextSequenceNumber = 1;
+
     private int $nextMessageNumber = 1;
+
     private int $destinationSocketId = 0;
+
     private int $maxPayloadSize = 1456; // 默认载荷大小 (1500 - 44)
+
     private int $sendWindowSize = 8192; // 发送窗口大小
+
     private int $maxBandwidth = 1000000; // 1Mbps 默认带宽限制
 
     // 重传管理
+    /** @var array<int, array<string, mixed>> */
     private array $unacknowledgedPackets = []; // 未确认的包
+
+    /** @var array<int, array<string, mixed>> */
     private array $retransmissionQueue = []; // 重传队列
+
     private int $retransmissionTimeout = 500; // 重传超时 (ms)
+
     private int $maxRetransmissions = 5; // 最大重传次数
 
     // 统计信息
     private int $totalSent = 0;
+
     private int $totalRetransmitted = 0;
+
     private int $totalBytes = 0;
+
     private float $lastSendTime = 0;
 
-    public function __construct(UdpTransport $transport)
-    {
-        $this->transport = $transport;
+    public function __construct(
+        private readonly TransportInterface $transport,
+    ) {
         $this->lastSendTime = microtime(true);
     }
 
@@ -53,7 +65,7 @@ class SendEngine
      */
     public function send(string $data): int
     {
-        if (empty($data)) {
+        if ('' === $data) {
             return 0;
         }
 
@@ -67,6 +79,7 @@ class SendEngine
         }
 
         $this->totalBytes += $totalSent;
+
         return $totalSent;
     }
 
@@ -101,8 +114,12 @@ class SendEngine
         $lostSequences = $nakPacket->getNakLostSequences();
 
         foreach ($lostSequences as $seq) {
-            if (isset($this->unacknowledgedPackets[$seq])) {
-                $this->scheduleRetransmission($seq);
+            if (!is_numeric($seq)) {
+                continue;
+            }
+            $sequenceNumber = (int) $seq;
+            if (isset($this->unacknowledgedPackets[$sequenceNumber])) {
+                $this->scheduleRetransmission($sequenceNumber);
             }
         }
     }
@@ -123,6 +140,7 @@ class SendEngine
 
     /**
      * 数据分片
+     * @return array<int, string>
      */
     private function fragmentData(string $data): array
     {
@@ -150,9 +168,9 @@ class SendEngine
         $packet->setDestinationSocketId($this->destinationSocketId);
 
         // 设置包位置标志
-        if ($totalChunks === 1) {
+        if (1 === $totalChunks) {
             $packet->setPacketPosition(DataPacket::PP_SINGLE);
-        } elseif ($chunkIndex === 0) {
+        } elseif (0 === $chunkIndex) {
             $packet->setPacketPosition(DataPacket::PP_FIRST);
         } elseif ($chunkIndex === $totalChunks - 1) {
             $packet->setPacketPosition(DataPacket::PP_LAST);
@@ -162,7 +180,7 @@ class SendEngine
 
         // 如果是最后一个包，递增消息号
         if ($chunkIndex === $totalChunks - 1) {
-            $this->nextMessageNumber++;
+            ++$this->nextMessageNumber;
         }
 
         return $packet;
@@ -195,7 +213,7 @@ class SendEngine
         // 安排重传
         $this->scheduleRetransmission($packet->getSequenceNumber());
 
-        $this->totalSent++;
+        ++$this->totalSent;
     }
 
     /**
@@ -212,8 +230,8 @@ class SendEngine
 
         if ($retransmissionCount >= $this->maxRetransmissions) {
             // 超过最大重传次数，从队列中移除
-            unset($this->unacknowledgedPackets[$sequenceNumber]);
-            unset($this->retransmissionQueue[$sequenceNumber]);
+            unset($this->unacknowledgedPackets[$sequenceNumber], $this->retransmissionQueue[$sequenceNumber]);
+
             return;
         }
 
@@ -235,6 +253,10 @@ class SendEngine
         $packetInfo = $this->unacknowledgedPackets[$sequenceNumber];
         $packet = $packetInfo['packet'];
 
+        if (!$packet instanceof DataPacket) {
+            return;
+        }
+
         // 设置重传标志
         $packet->setRetransmissionFlag(true);
 
@@ -243,8 +265,10 @@ class SendEngine
         $this->transport->send($data);
 
         // 更新重传信息
-        $this->unacknowledgedPackets[$sequenceNumber]['retransmissionCount']++;
-        $this->totalRetransmitted++;
+        $currentCount = $this->unacknowledgedPackets[$sequenceNumber]['retransmissionCount'];
+        $retransmissionCount = is_numeric($currentCount) ? (int) $currentCount : 0;
+        $this->unacknowledgedPackets[$sequenceNumber]['retransmissionCount'] = $retransmissionCount + 1;
+        ++$this->totalRetransmitted;
 
         // 重新安排下次重传
         $this->scheduleRetransmission($sequenceNumber);
@@ -263,7 +287,7 @@ class SendEngine
 
         if ($timeDiff < $requiredTime) {
             $sleepTime = $requiredTime - $timeDiff;
-            usleep((int)($sleepTime * 1000000)); // 转换为微秒
+            usleep((int) ($sleepTime * 1000000)); // 转换为微秒
         }
 
         $this->lastSendTime = microtime(true);
@@ -320,6 +344,7 @@ class SendEngine
 
     /**
      * 获取统计信息
+     * @return array<string, int>
      */
     public function getStatistics(): array
     {

@@ -2,12 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Tourze\SRT\Tests\Unit\Exception;
+namespace Tourze\SRT\Tests\Exception;
 
-use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\CoversClass;
+use Tourze\PHPUnitBase\AbstractExceptionTestCase;
 use Tourze\SRT\Exception\InvalidTimerException;
 
-class InvalidTimerExceptionTest extends TestCase
+/**
+ * @internal
+ */
+#[CoversClass(InvalidTimerException::class)]
+final class InvalidTimerExceptionTest extends AbstractExceptionTestCase
 {
     public function testNoCallbackSet(): void
     {

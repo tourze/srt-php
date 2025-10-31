@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace Tourze\SRT\Exception;
 
-use InvalidArgumentException;
-
 /**
  * SRT 包格式无效异常
  *
  * 当解析或构造 SRT 包时遇到格式错误时抛出此异常
  */
-class InvalidPacketException extends InvalidArgumentException
+class InvalidPacketException extends \InvalidArgumentException
 {
     public static function invalidHeaderLength(int $actual): self
     {
@@ -42,4 +40,4 @@ class InvalidPacketException extends InvalidArgumentException
     {
         return new self("Encryption flags must be 0-3, got {$flags}");
     }
-} 
+}

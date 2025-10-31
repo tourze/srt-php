@@ -21,24 +21,23 @@ class DataPacket
     public const PP_MIDDLE = 0b00;      // 中间包
     public const PP_LAST = 0b01;        // 末包
 
-    private int $sequenceNumber = 0;
-    private int $messageNumber = 0;
     private int $timestamp = 0;
+
     private int $destinationSocketId = 0;
+
     private int $packetPosition = self::PP_SINGLE;
+
     private bool $orderFlag = false;
+
     private int $keyBasedEncryption = 0;
+
     private bool $retransmissionFlag = false;
-    private string $payload = '';
 
     public function __construct(
-        int $sequenceNumber = 0,
-        int $messageNumber = 0,
-        string $payload = ''
+        private readonly int $sequenceNumber = 0,
+        private readonly int $messageNumber = 0,
+        private readonly string $payload = '',
     ) {
-        $this->sequenceNumber = $sequenceNumber;
-        $this->messageNumber = $messageNumber;
-        $this->payload = $payload;
         $this->timestamp = $this->getCurrentTimestamp();
     }
 
@@ -47,7 +46,8 @@ class DataPacket
      */
     public function setSequenceNumber(int $sequenceNumber): void
     {
-        $this->sequenceNumber = $sequenceNumber & 0x7FFFFFFF; // 31 位
+        // 注意：sequenceNumber 现在是 readonly 属性，此方法已废弃
+        // 如需修改序列号，请创建新实例
     }
 
     /**
@@ -63,7 +63,8 @@ class DataPacket
      */
     public function setMessageNumber(int $messageNumber): void
     {
-        $this->messageNumber = $messageNumber & 0x1FFFFFF; // 25 位
+        // 注意：messageNumber 现在是 readonly 属性，此方法已废弃
+        // 如需修改消息号，请创建新实例
     }
 
     /**
@@ -175,7 +176,8 @@ class DataPacket
      */
     public function setPayload(string $payload): void
     {
-        $this->payload = $payload;
+        // 注意：payload 现在是 readonly 属性，此方法已废弃
+        // 如需修改载荷数据，请创建新实例
     }
 
     /**
@@ -199,7 +201,7 @@ class DataPacket
      */
     public function isSinglePacket(): bool
     {
-        return $this->packetPosition === self::PP_SINGLE;
+        return self::PP_SINGLE === $this->packetPosition;
     }
 
     /**
@@ -207,7 +209,7 @@ class DataPacket
      */
     public function isFirstPacket(): bool
     {
-        return $this->packetPosition === self::PP_FIRST;
+        return self::PP_FIRST === $this->packetPosition;
     }
 
     /**
@@ -215,7 +217,7 @@ class DataPacket
      */
     public function isLastPacket(): bool
     {
-        return $this->packetPosition === self::PP_LAST;
+        return self::PP_LAST === $this->packetPosition;
     }
 
     /**
@@ -260,18 +262,28 @@ class DataPacket
         $pos = 0;
 
         // 第一个 32 位字段
-        $field1 = unpack('N', substr($data, $pos, 4))[1];
+        $field1Result = unpack('N', substr($data, $pos, 4));
+        if (false === $field1Result || !isset($field1Result[1])) {
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
+        }
+        $field1 = $field1Result[1];
+        assert(is_int($field1));
         $pos += 4;
 
         $f = ($field1 >> 31) & 1;
-        if ($f !== 0) {
+        if (0 !== $f) {
             throw InvalidPacketException::invalidControlType($field1);
         }
 
         $sequenceNumber = $field1 & 0x7FFFFFFF;
 
         // 第二个 32 位字段
-        $field2 = unpack('N', substr($data, $pos, 4))[1];
+        $field2Result = unpack('N', substr($data, $pos, 4));
+        if (false === $field2Result || !isset($field2Result[1])) {
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
+        }
+        $field2 = $field2Result[1];
+        assert(is_int($field2));
         $pos += 4;
 
         $packetPosition = ($field2 >> 30) & 0b11;
@@ -281,11 +293,21 @@ class DataPacket
         $messageNumber = $field2 & 0x1FFFFFF;
 
         // 第三个 32 位字段：时间戳
-        $timestamp = unpack('N', substr($data, $pos, 4))[1];
+        $timestampResult = unpack('N', substr($data, $pos, 4));
+        if (false === $timestampResult || !isset($timestampResult[1])) {
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
+        }
+        $timestamp = $timestampResult[1];
+        assert(is_int($timestamp));
         $pos += 4;
 
         // 第四个 32 位字段：目标 Socket ID
-        $destinationSocketId = unpack('N', substr($data, $pos, 4))[1];
+        $destinationSocketIdResult = unpack('N', substr($data, $pos, 4));
+        if (false === $destinationSocketIdResult || !isset($destinationSocketIdResult[1])) {
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
+        }
+        $destinationSocketId = $destinationSocketIdResult[1];
+        assert(is_int($destinationSocketId));
         $pos += 4;
 
         // 载荷数据

@@ -8,8 +8,9 @@ use Tourze\SRT\Engine\SendEngine;
 use Tourze\SRT\Protocol\ControlPacket;
 use Tourze\SRT\Protocol\DataPacket;
 use Tourze\SRT\Protocol\HandshakeManager;
+use Tourze\SRT\Transport\UdpTransport;
 
-/**
+/*
  * SRT Phase 2 功能演示
  *
  * 演示 SRT 协议的核心功能：
@@ -45,36 +46,35 @@ try {
     printf("- 握手类型: %d (Induction)\n", $inductionPacket->getHandshakeType());
     printf("- Socket ID: %d\n", $inductionPacket->getSrtSocketId());
     echo "\n";
-    
+
     // Step 2: Listener 处理 Induction 并响应
     echo "Step 2: Listener 处理 Induction 握手包\n";
     $inductionResponse = $listenerHandshake->processListenerHandshake($inductionPacket);
     printf("- 响应类型: %d (Response)\n", $inductionResponse->getHandshakeType());
     printf("- Listener Socket ID: %d\n", $inductionResponse->getSrtSocketId());
     echo "\n";
-    
+
     // Step 3: Caller 发送 Conclusion
     echo "Step 3: Caller 创建 Conclusion 握手包\n";
     $conclusionPacket = $callerHandshake->createCallerConclusion($callerSocketId, $inductionResponse);
     printf("- 握手类型: %d (Conclusion)\n", $conclusionPacket->getHandshakeType());
     printf("- 扩展字段: 0x%x (SRT Magic)\n", $conclusionPacket->getExtensionField());
     printf("- 加密字段: %d (已启用)\n", $conclusionPacket->getEncryptionField());
-    
+
     $extensions = $conclusionPacket->getSrtExtensions();
     printf("- SRT 扩展数量: %d\n", count($extensions));
     if (isset($extensions[HandshakeManager::HS_EXT_SRT_TSBPD_DELAY])) {
         printf("- TSBPD 延迟: %d 微秒\n", $extensions[HandshakeManager::HS_EXT_SRT_TSBPD_DELAY]);
     }
     echo "\n";
-    
+
     // Step 4: Listener 处理 Conclusion
     echo "Step 4: Listener 处理 Conclusion 握手包\n";
     $conclusionResponse = $listenerHandshake->processListenerHandshake($conclusionPacket);
     printf("- 握手完成状态: %s\n", $listenerHandshake->isCompleted() ? '是' : '否');
     echo "\n";
-    
 } catch (Exception $e) {
-    echo "握手错误: " . $e->getMessage() . "\n\n";
+    echo '握手错误: ' . $e->getMessage() . "\n\n";
 }
 
 // 2. 演示数据包处理
@@ -82,9 +82,9 @@ echo "2. 数据包处理演示\n";
 echo "----------------\n";
 
 // 创建数据包
-$testData = "Hello, SRT World! 这是一条测试消息。";
-echo "原始数据: $testData\n";
-echo "数据长度: " . strlen($testData) . " 字节\n\n";
+$testData = 'Hello, SRT World! 这是一条测试消息。';
+echo "原始数据: {$testData}\n";
+echo '数据长度: ' . strlen($testData) . " 字节\n\n";
 
 // 创建数据包
 $dataPacket = new DataPacket(1001, 1, $testData);
@@ -101,10 +101,10 @@ echo "\n";
 
 // 序列化和反序列化
 $serializedData = $dataPacket->serialize();
-echo "序列化后大小: " . strlen($serializedData) . " 字节\n";
+echo '序列化后大小: ' . strlen($serializedData) . " 字节\n";
 
 $deserializedPacket = DataPacket::deserialize($serializedData);
-echo "反序列化成功: " . ($deserializedPacket->getPayload() === $testData ? '是' : '否') . "\n\n";
+echo '反序列化成功: ' . ($deserializedPacket->getPayload() === $testData ? '是' : '否') . "\n\n";
 
 // 3. 演示控制包
 echo "3. 控制包演示\n";
@@ -140,69 +140,74 @@ echo "---------------\n";
 // 注意：这里只演示统计功能，实际的网络传输需要真实的 UDP socket
 try {
     // 创建模拟的 UDP 传输（用于演示）
-    $mockTransport = new class implements \Tourze\SRT\Transport\UdpTransport {
+    $mockTransport = new class implements UdpTransport {
         private array $sentData = [];
-        
-        public function send(string $data): int {
+
+        public function send(string $data): int
+        {
             $this->sentData[] = $data;
+
             return strlen($data);
         }
-        
-        public function receive(): ?string {
+
+        public function receive(): ?string
+        {
             return null; // 模拟实现
         }
-        
-        public function bind(string $host, int $port): bool {
+
+        public function bind(string $host, int $port): bool
+        {
             return true; // 模拟实现
         }
-        
-        public function connect(string $host, int $port): bool {
+
+        public function connect(string $host, int $port): bool
+        {
             return true; // 模拟实现
         }
-        
-        public function close(): void {
+
+        public function close(): void
+        {
             // 模拟实现
         }
-        
-        public function getSentData(): array {
+
+        public function getSentData(): array
+        {
             return $this->sentData;
         }
     };
-    
+
     $sendEngine = new SendEngine($mockTransport);
     $sendEngine->setDestinationSocketId($listenerSocketId);
     $sendEngine->setMaxPayloadSize(1000);
-    
+
     echo "发送引擎初始统计:\n";
     $stats = $sendEngine->getStatistics();
     foreach ($stats as $key => $value) {
         printf("- %s: %s\n", $key, $value);
     }
     echo "\n";
-    
+
     // 模拟发送一些数据
-    $longMessage = str_repeat("这是一条很长的测试消息。", 50);
-    echo "模拟发送长消息 (" . strlen($longMessage) . " 字节)...\n";
-    
+    $longMessage = str_repeat('这是一条很长的测试消息。', 50);
+    echo '模拟发送长消息 (' . strlen($longMessage) . " 字节)...\n";
+
     try {
         $bytesSent = $sendEngine->send($longMessage);
-        echo "发送完成，字节数: $bytesSent\n\n";
-        
+        echo "发送完成，字节数: {$bytesSent}\n\n";
+
         echo "发送引擎更新后统计:\n";
         $newStats = $sendEngine->getStatistics();
         foreach ($newStats as $key => $value) {
             printf("- %s: %s\n", $key, $value);
         }
         echo "\n";
-        
-        echo "实际发送的包数量: " . count($mockTransport->getSentData()) . "\n";
-        
+
+        echo '实际发送的包数量: ' . count($mockTransport->getSentData()) . "\n";
     } catch (Exception $e) {
-        echo "发送模拟中断: " . $e->getMessage() . "\n";
+        echo '发送模拟中断: ' . $e->getMessage() . "\n";
     }
-    
 } catch (Exception $e) {
-    echo "引擎演示错误: " . $e->getMessage() . "\n";
+    echo '引擎演示错误: ' . $e->getMessage() . "\n";
 }
 
 echo "\n=== Phase 2 演示完成 ===\n";
@@ -218,4 +223,4 @@ echo "\n下一步: Phase 3 - 高级特性开发\n";
 echo "- 流量控制算法\n";
 echo "- 拥塞控制\n";
 echo "- Live 模式 TSBPD\n";
-echo "- 性能优化\n"; 
+echo "- 性能优化\n";

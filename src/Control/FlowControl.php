@@ -13,24 +13,9 @@ namespace Tourze\SRT\Control;
 class FlowControl
 {
     /**
-     * 发送窗口大小 (包数量)
-     */
-    private int $sendWindowSize;
-
-    /**
-     * 接收窗口大小 (包数量)
-     */
-    private int $receiveWindowSize;
-
-    /**
      * 当前发送窗口中的包数量
      */
     private int $packetsInFlight = 0;
-
-    /**
-     * 最大发送速率 (bytes/second)
-     */
-    private int $maxSendRate;
 
     /**
      * 当前发送速率 (bytes/second)
@@ -59,6 +44,7 @@ class FlowControl
 
     /**
      * 统计信息
+     * @var array{packets_sent: int, packets_dropped: int, bytes_sent: int, rate_limited_count: int, window_full_count: int}
      */
     private array $stats = [
         'packets_sent' => 0,
@@ -69,13 +55,10 @@ class FlowControl
     ];
 
     public function __construct(
-        int $sendWindowSize = 8192,
-        int $receiveWindowSize = 8192,
-        int $maxSendRate = 1000000 // 1MB/s 默认
+        private int $sendWindowSize = 8192,
+        private int $receiveWindowSize = 8192,
+        private readonly int $maxSendRate = 1000000, // 1MB/s 默认
     ) {
-        $this->sendWindowSize = $sendWindowSize;
-        $this->receiveWindowSize = $receiveWindowSize;
-        $this->maxSendRate = $maxSendRate;
         $this->currentSendRate = $maxSendRate;
 
         // 初始化令牌桶
@@ -95,13 +78,15 @@ class FlowControl
 
         // 检查发送窗口
         if ($this->packetsInFlight >= $this->sendWindowSize) {
-            $this->stats['window_full_count']++;
+            ++$this->stats['window_full_count'];
+
             return false;
         }
 
         // 检查速率限制
         if ($this->tokenBucket < $packetSize) {
-            $this->stats['rate_limited_count']++;
+            ++$this->stats['rate_limited_count'];
+
             return false;
         }
 
@@ -113,9 +98,9 @@ class FlowControl
      */
     public function onPacketSent(int $packetSize): void
     {
-        $this->packetsInFlight++;
+        ++$this->packetsInFlight;
         $this->tokenBucket -= $packetSize;
-        $this->stats['packets_sent']++;
+        ++$this->stats['packets_sent'];
         $this->stats['bytes_sent'] += $packetSize;
     }
 
@@ -160,7 +145,7 @@ class FlowControl
      */
     public function adjustSendRate(float $factor): void
     {
-        $this->currentSendRate = (int)($this->currentSendRate * $factor);
+        $this->currentSendRate = (int) ($this->currentSendRate * $factor);
         $this->currentSendRate = max(1000, min($this->maxSendRate, $this->currentSendRate));
 
         // 更新令牌桶参数
@@ -222,11 +207,13 @@ class FlowControl
     public function getTokenBucketUtilization(): float
     {
         $this->updateTokenBucket();
+
         return $this->bucketCapacity > 0 ? $this->tokenBucket / $this->bucketCapacity : 0.0;
     }
 
     /**
      * 获取统计信息
+     * @return array<string, mixed>
      */
     public function getStats(): array
     {
@@ -253,4 +240,4 @@ class FlowControl
             'window_full_count' => 0,
         ];
     }
-} 
+}

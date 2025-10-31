@@ -34,7 +34,9 @@ class TsbpdManager
 
     /**
      * 包投递队列
+     * @var array<int, array<string, mixed>>
      */
+    /** @var array<array{data: string, timestamp: int, sequence: int, delivery_time: int, arrival_time: int}> */
     private array $deliveryQueue = [];
 
     /**
@@ -52,9 +54,7 @@ class TsbpdManager
      */
     private bool $enableTooLatePacketDrop = true;
 
-    /**
-     * 统计信息
-     */
+    /** @var array<string, int|float> */
     private array $stats = [
         'packets_delivered' => 0,
         'packets_dropped_too_late' => 0,
@@ -78,7 +78,7 @@ class TsbpdManager
         $currentTime = $this->getCurrentTime();
 
         // 初始化基准时间戳
-        if ($this->baseTimestamp === 0) {
+        if (0 === $this->baseTimestamp) {
             $this->baseTimestamp = $timestamp;
             $this->lastDeliveryTime = $currentTime;
         }
@@ -88,13 +88,15 @@ class TsbpdManager
 
         // 检查是否太晚到达
         if ($this->enableTooLatePacketDrop && $deliveryTime < $currentTime) {
-            $this->stats['packets_dropped_too_late']++;
+            ++$this->stats['packets_dropped_too_late'];
+
             return false;
         }
 
         // 检查是否太早到达 (时间戳错误)
         if ($deliveryTime > $currentTime + $this->playbackDelay * 10) {
-            $this->stats['packets_dropped_too_early']++;
+            ++$this->stats['packets_dropped_too_early'];
+
             return false;
         }
 
@@ -108,8 +110,11 @@ class TsbpdManager
         ];
 
         // 按投递时间排序
-        usort($this->deliveryQueue, function ($a, $b) {
-            return $a['delivery_time'] <=> $b['delivery_time'];
+        usort($this->deliveryQueue, function (array $a, array $b): int {
+            $aTime = $a['delivery_time'];
+            $bTime = $b['delivery_time'];
+
+            return $aTime <=> $bTime;
         });
 
         return true;
@@ -117,21 +122,25 @@ class TsbpdManager
 
     /**
      * 获取准备投递的数据包
+     * @return array<int, array<string, mixed>>
      */
     public function getReadyPackets(): array
     {
         $currentTime = $this->getCurrentTime();
+        /** @var array<int, array<string, mixed>> $readyPackets */
         $readyPackets = [];
 
-        while (!empty($this->deliveryQueue)) {
+        while ([] !== $this->deliveryQueue) {
             $packet = $this->deliveryQueue[0];
 
-            if ($packet['delivery_time'] <= $currentTime) {
+            $deliveryTime = $packet['delivery_time'];
+            if ($deliveryTime <= $currentTime) {
                 $readyPackets[] = array_shift($this->deliveryQueue);
-                $this->stats['packets_delivered']++;
+                ++$this->stats['packets_delivered'];
 
                 // 更新统计信息
-                $deliveryDelay = $currentTime - $packet['arrival_time'];
+                $arrivalTime = $packet['arrival_time'];
+                $deliveryDelay = $currentTime - $arrivalTime;
                 $this->updateDelayStats($deliveryDelay);
             } else {
                 break;
@@ -161,12 +170,12 @@ class TsbpdManager
      */
     private function applyClockDriftCompensation(int $timestamp): int
     {
-        if ($this->clockDriftRate === 0.0 && $this->clockOffset === 0) {
+        if (0.0 === $this->clockDriftRate && 0 === $this->clockOffset) {
             return $timestamp;
         }
 
         $elapsedTime = $timestamp - $this->baseTimestamp;
-        $driftCorrection = (int)($elapsedTime * $this->clockDriftRate / 1000000.0);
+        $driftCorrection = (int) ($elapsedTime * $this->clockDriftRate / 1000000.0);
 
         return $timestamp + $driftCorrection + $this->clockOffset;
     }
@@ -177,7 +186,7 @@ class TsbpdManager
     public function updateClockDrift(float $driftRatePpm): void
     {
         $this->clockDriftRate = $driftRatePpm;
-        $this->stats['clock_drift_corrections']++;
+        ++$this->stats['clock_drift_corrections'];
     }
 
     /**
@@ -206,10 +215,11 @@ class TsbpdManager
         $droppedCount = 0;
 
         foreach ($this->deliveryQueue as $index => $packet) {
-            if ($packet['delivery_time'] < $currentTime - $this->dropThreshold) {
+            $deliveryTime = $packet['delivery_time'];
+            if ($deliveryTime < $currentTime - $this->dropThreshold) {
                 unset($this->deliveryQueue[$index]);
-                $droppedCount++;
-                $this->stats['packets_dropped_too_late']++;
+                ++$droppedCount;
+                ++$this->stats['packets_dropped_too_late'];
             }
         }
 
@@ -224,7 +234,7 @@ class TsbpdManager
      */
     private function getCurrentTime(): int
     {
-        return (int)(hrtime(true) / 1000);
+        return (int) (hrtime(true) / 1000);
     }
 
     /**
@@ -232,12 +242,14 @@ class TsbpdManager
      */
     private function updateDelayStats(int $delay): void
     {
-        $this->stats['max_delivery_delay'] = max($this->stats['max_delivery_delay'], $delay);
+        $maxDelay = (int) $this->stats['max_delivery_delay'];
+        $this->stats['max_delivery_delay'] = max($maxDelay, $delay);
 
         // 计算平均延迟 (简单移动平均)
         $alpha = 0.1; // 平滑因子
+        $avgDelay = (float) $this->stats['average_delivery_delay'];
         $this->stats['average_delivery_delay'] =
-            $alpha * $delay + (1 - $alpha) * $this->stats['average_delivery_delay'];
+            $alpha * $delay + (1 - $alpha) * $avgDelay;
     }
 
     /**
@@ -245,7 +257,7 @@ class TsbpdManager
      */
     public function getPlaybackDelay(): int
     {
-        return (int)($this->playbackDelay / 1000); // 返回毫秒
+        return (int) ($this->playbackDelay / 1000); // 返回毫秒
     }
 
     /**
@@ -261,7 +273,11 @@ class TsbpdManager
      */
     public function getNextDeliveryTime(): ?int
     {
-        return !empty($this->deliveryQueue) ? $this->deliveryQueue[0]['delivery_time'] : null;
+        if ([] === $this->deliveryQueue) {
+            return null;
+        }
+
+        return $this->deliveryQueue[0]['delivery_time'];
     }
 
     /**
@@ -304,7 +320,7 @@ class TsbpdManager
     {
         $nextDeliveryTime = $this->getNextDeliveryTime();
 
-        if ($nextDeliveryTime === null) {
+        if (null === $nextDeliveryTime) {
             return 0;
         }
 
@@ -313,6 +329,7 @@ class TsbpdManager
 
     /**
      * 获取统计信息
+     * @return array<string, mixed>
      */
     public function getStats(): array
     {

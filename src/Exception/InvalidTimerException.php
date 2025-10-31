@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace Tourze\SRT\Exception;
 
-use InvalidArgumentException;
-
 /**
  * 定时器无效异常
  *
  * 当定时器操作遇到无效参数或状态时抛出此异常
  */
-class InvalidTimerException extends InvalidArgumentException
+class InvalidTimerException extends \InvalidArgumentException
 {
     public static function noCallbackSet(string $timerType): self
     {

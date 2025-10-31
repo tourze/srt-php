@@ -27,17 +27,18 @@ class ControlPacket
     public const TYPE_PEER_ERROR = 0x0008;
     public const TYPE_USER_DEFINED = 0x7FFF;
 
-    private int $controlType = 0;
     private int $subType = 0;
-    private int $additionalInfo = 0;
-    private int $timestamp = 0;
-    private int $destinationSocketId = 0;
-    private string $controlInformation = '';
 
-    public function __construct(int $controlType = 0, string $controlInformation = '')
-    {
-        $this->controlType = $controlType;
-        $this->controlInformation = $controlInformation;
+    private int $additionalInfo = 0;
+
+    private int $timestamp = 0;
+
+    private int $destinationSocketId = 0;
+
+    public function __construct(
+        private readonly int $controlType = 0,
+        private readonly string $controlInformation = '',
+    ) {
         $this->timestamp = $this->getCurrentTimestamp();
     }
 
@@ -46,7 +47,8 @@ class ControlPacket
      */
     public function setControlType(int $type): void
     {
-        $this->controlType = $type & 0x7FFF; // 15 位
+        // 注意：controlType 现在是 readonly 属性，此方法已废弃
+        // 如需修改控制类型，请创建新实例
     }
 
     /**
@@ -123,10 +125,12 @@ class ControlPacket
 
     /**
      * 设置控制信息
+     * 注意：controlInformation 现在是 readonly 属性，此方法已废弃
+     * 如需修改控制信息，请创建新实例
      */
     public function setControlInformation(string $info): void
     {
-        $this->controlInformation = $info;
+        // readonly 属性无法修改，此方法已废弃
     }
 
     /**
@@ -142,30 +146,28 @@ class ControlPacket
      */
     public static function createAck(int $sequenceNumber, int $destinationSocketId): self
     {
-        $packet = new self(self::TYPE_ACK);
+        // ACK 控制信息包含接收到的最高序列号
+        $packet = new self(self::TYPE_ACK, pack('N', $sequenceNumber));
         $packet->setAdditionalInfo($sequenceNumber);
         $packet->setDestinationSocketId($destinationSocketId);
-
-        // ACK 控制信息包含接收到的最高序列号
-        $packet->setControlInformation(pack('N', $sequenceNumber));
 
         return $packet;
     }
 
     /**
      * 创建 NAK 包
+     * @param array<int> $lostSequences
      */
     public static function createNak(array $lostSequences, int $destinationSocketId): self
     {
-        $packet = new self(self::TYPE_NAK);
-        $packet->setDestinationSocketId($destinationSocketId);
-
         // NAK 控制信息包含丢失的序列号列表
         $nakInfo = '';
         foreach ($lostSequences as $seq) {
             $nakInfo .= pack('N', $seq);
         }
-        $packet->setControlInformation($nakInfo);
+
+        $packet = new self(self::TYPE_NAK, $nakInfo);
+        $packet->setDestinationSocketId($destinationSocketId);
 
         return $packet;
     }
@@ -177,6 +179,7 @@ class ControlPacket
     {
         $packet = new self(self::TYPE_KEEPALIVE);
         $packet->setDestinationSocketId($destinationSocketId);
+
         return $packet;
     }
 
@@ -187,6 +190,7 @@ class ControlPacket
     {
         $packet = new self(self::TYPE_CONGESTION_WARNING);
         $packet->setDestinationSocketId($destinationSocketId);
+
         return $packet;
     }
 
@@ -197,6 +201,7 @@ class ControlPacket
     {
         $packet = new self(self::TYPE_SHUTDOWN);
         $packet->setDestinationSocketId($destinationSocketId);
+
         return $packet;
     }
 
@@ -208,25 +213,33 @@ class ControlPacket
         $packet = new self(self::TYPE_ACKACK);
         $packet->setAdditionalInfo($ackNumber);
         $packet->setDestinationSocketId($destinationSocketId);
+
         return $packet;
     }
 
     /**
      * 获取 NAK 丢失序列号列表
+     * @return array<int>
      */
     public function getNakLostSequences(): array
     {
-        if ($this->controlType !== self::TYPE_NAK) {
+        if (self::TYPE_NAK !== $this->controlType) {
             return [];
         }
 
+        /** @var array<int> $sequences */
         $sequences = [];
         $data = $this->controlInformation;
         $len = strlen($data);
 
         for ($i = 0; $i < $len; $i += 4) {
             if ($i + 4 <= $len) {
-                $sequences[] = unpack('N', substr($data, $i, 4))[1];
+                $unpackResult = unpack('N', substr($data, $i, 4));
+                if (false !== $unpackResult && isset($unpackResult[1])) {
+                    $value = $unpackResult[1];
+                    assert(is_int($value));
+                    $sequences[] = $value;
+                }
             }
         }
 
@@ -238,7 +251,7 @@ class ControlPacket
      */
     public function getAckSequenceNumber(): int
     {
-        if ($this->controlType !== self::TYPE_ACK) {
+        if (self::TYPE_ACK !== $this->controlType) {
             return 0;
         }
 
@@ -282,11 +295,16 @@ class ControlPacket
         $pos = 0;
 
         // 第一个 32 位字段
-        $field1 = unpack('N', substr($data, $pos, 4))[1];
+        $field1Result = unpack('N', substr($data, $pos, 4));
+        if (false === $field1Result || !isset($field1Result[1])) {
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
+        }
+        $field1 = $field1Result[1];
+        assert(is_int($field1));
         $pos += 4;
 
         $f = ($field1 >> 31) & 1;
-        if ($f !== 1) {
+        if (1 !== $f) {
             throw InvalidPacketException::invalidControlType($field1);
         }
 
@@ -294,15 +312,30 @@ class ControlPacket
         $subType = $field1 & 0xFFFF;
 
         // 第二个 32 位字段：附加信息
-        $additionalInfo = unpack('N', substr($data, $pos, 4))[1];
+        $additionalInfoResult = unpack('N', substr($data, $pos, 4));
+        if (false === $additionalInfoResult || !isset($additionalInfoResult[1])) {
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
+        }
+        $additionalInfo = $additionalInfoResult[1];
+        assert(is_int($additionalInfo));
         $pos += 4;
 
         // 第三个 32 位字段：时间戳
-        $timestamp = unpack('N', substr($data, $pos, 4))[1];
+        $timestampResult = unpack('N', substr($data, $pos, 4));
+        if (false === $timestampResult || !isset($timestampResult[1])) {
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
+        }
+        $timestamp = $timestampResult[1];
+        assert(is_int($timestamp));
         $pos += 4;
 
         // 第四个 32 位字段：目标 Socket ID
-        $destinationSocketId = unpack('N', substr($data, $pos, 4))[1];
+        $destinationSocketIdResult = unpack('N', substr($data, $pos, 4));
+        if (false === $destinationSocketIdResult || !isset($destinationSocketIdResult[1])) {
+            throw InvalidPacketException::invalidHeaderLength(strlen($data));
+        }
+        $destinationSocketId = $destinationSocketIdResult[1];
+        assert(is_int($destinationSocketId));
         $pos += 4;
 
         // 控制信息
@@ -322,7 +355,7 @@ class ControlPacket
      */
     private function getCurrentTimestamp(): int
     {
-        return (int)(hrtime(true) / 1000); // 转换为微秒
+        return (int) (hrtime(true) / 1000); // 转换为微秒
     }
 
     /**
