@@ -157,7 +157,6 @@ class ReceiveEngine
         }
 
         if (!is_array($this->messageBuffer[$messageNumber]['packets'])) {
-            /** @phpstan-ignore-next-line */
             $this->messageBuffer[$messageNumber]['packets'] = [];
         }
         $this->messageBuffer[$messageNumber]['packets'][] = $packet;
